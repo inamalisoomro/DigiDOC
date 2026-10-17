@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "digidoc-healthcare": {
+      "command": "node",
+      "args": [
+        "./mcp-server/dist/index.js"
+      ],
+      "env": {
+        "DIGIDOC_API_BASE_URL": "http://localhost:4000",
+        "DIGIDOC_MCP_API_KEY": "SET_THIS_IN_YOUR_LOCAL_ENVIRONMENT"
+      }
+    }
+  }
+}
