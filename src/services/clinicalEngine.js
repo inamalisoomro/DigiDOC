@@ -5,13 +5,13 @@ import { clinicalState, ClinicalStateManager } from './clinicalState';
 
 export class ClinicalEngine {
   constructor() {
-    this.symptomsList = diseasesData.symptoms || [];
+    this.clinicalState = clinicalState;
+    this.symptomsList = this.clinicalState.symptomsList || diseasesData.symptoms || [];
     this.conditionsList = diseasesData.conditions || [];
     this.specialtiesMap = diseasesData.specialties || {};
     this.doctors = quettaDoctors || [];
     this.tests = labRangesData.tests || [];
     this.conversationTurn = 0;
-    this.clinicalState = clinicalState;
   }
 
   /**
@@ -223,6 +223,30 @@ export class ClinicalEngine {
         condition: true,
         text: 'Kya aap is takleef ke liye koi dawa le rahe hain ya aapko kisi medicine se allergy hai?',
         cleanSpeechText: 'Kya aap koi dawa le rahe hain ya kisi medicine se allergy hai?'
+      },
+      {
+        id: 'vulnerable_age_pregnancy_check',
+        condition: true,
+        text: 'Baraye meharbani batayein kya mareez ki umar 5 saal se kam ya 65 se zyada hai, ya hamal (pregnancy) ka maamla hai?',
+        cleanSpeechText: 'Kya mareez ki umar 5 saal se kam ya 65 se zyada hai?'
+      },
+      {
+        id: 'hydration_fluid_check',
+        condition: true,
+        text: 'Kya aap munasib miqdaar mein paani ya ORS pi pa rahe hain aur ulti ya dast se kamzori mehsoos ho rahi hai?',
+        cleanSpeechText: 'Kya aap munasib miqdaar mein paani ya ORS pi pa rahe hain?'
+      },
+      {
+        id: 'timing_pattern_check',
+        condition: true,
+        text: 'Kya yeh takleef kisi khas waqt (jaise subah ke waqt ya raat ko) zyada shadeed mehsoos hoti hai?',
+        cleanSpeechText: 'Kya yeh takleef kisi khas waqt zyada mehsoos hoti hai?'
+      },
+      {
+        id: 'exhausted_general_update',
+        condition: true,
+        text: 'Apni takleef mein aane wali kisi bhi mazeed tabdeeli ya naye alamat ke baray mein batayein.',
+        cleanSpeechText: 'Apni takleef mein aane wali kisi bhi tabdeeli ke baray mein batayein.'
       }
     ];
 
@@ -236,10 +260,10 @@ export class ClinicalEngine {
       }
     }
 
-    // Default general follow-up if all specific questions have been exhausted
+    // Default open check-in if all specific & safety questions have already been recorded
     return {
-      text: 'Apni takleef mein aane wali kisi bhi mazeed tabdeeli ya naye alamat ke baray mein batayein.',
-      cleanSpeechText: 'Apni takleef mein aane wali kisi bhi tabdeeli ke baray mein batayein.'
+      text: 'Apni takleef ke baray mein mazeed wazeh karein taakay behtar rehnumayi ki ja sakay.',
+      cleanSpeechText: 'Apni takleef ke baray mein mazeed wazeh karein.'
     };
   }
 

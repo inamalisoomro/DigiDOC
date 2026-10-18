@@ -58,7 +58,21 @@ const NEGATION_PATTERNS = [
 
 export class ClinicalStateManager {
   constructor() {
-    this.symptomsList = diseasesData.symptoms || [];
+    this.symptomsList = (diseasesData.symptoms || []).map(sym => {
+      if (sym.id === 'runny_nose') {
+        const rur = sym.keywords?.rur || [];
+        const ur = sym.keywords?.ur || [];
+        return {
+          ...sym,
+          keywords: {
+            ...sym.keywords,
+            rur: [...rur, 'nazla', 'nazlah'],
+            ur: [...ur, 'نزلہ']
+          }
+        };
+      }
+      return sym;
+    });
     this.conditionsList = diseasesData.conditions || [];
     this.redFlagRules = diseasesData.red_flag_rules || [];
     this.reset();
