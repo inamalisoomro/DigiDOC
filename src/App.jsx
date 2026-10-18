@@ -312,7 +312,8 @@ function App() {
           }}
         />
       )}
-
+ 
+ 
       <ConversationDrawer 
         isOpen={showTranscript}
         onClose={() => setShowTranscript(false)}
