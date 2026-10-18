@@ -1,0 +1,39 @@
+{
+  "general_principles": [
+    "Never autonomously prescribe antibiotics, narcotic analgesics, or steroids.",
+    "Promote evidence-based hydration, dietary modifications, and non-pharmacological supportive care.",
+    "Instruct patients when to escalate immediately to licensed medical providers."
+  ],
+  "supportive_plans": {
+    "dehydration_diarrhea": {
+      "title": "Diarrhea & Dehydration Home Care",
+      "urdu_title": "اسہال اور پانی کی کمی کی نگہداشت",
+      "steps": [
+        "1 sachet of WHO-formula ORS in 1 liter of clean boiled water.",
+        "Drink small sips every 10-15 minutes.",
+        "Eat light easily digestible food (Khichdi, yogurt, boiled potatoes).",
+        "Avoid high-sugar juices, caffeinated sodas, and oily curries."
+      ]
+    },
+    "fever_flu": {
+      "title": "Viral Fever & Flu Supportive Protocol",
+      "urdu_title": "موسمی بخار اور نزلہ زکام کی گھریلو رہنمائی",
+      "steps": [
+        "Complete physical rest and adequate sleep.",
+        "Sponging with normal lukewarm water if body temperature exceeds 101F.",
+        "Maintain high fluid intake (green tea, warm soups, lemonade).",
+        "Over-the-counter Paracetamol (500mg) for fever reduction under adult guidelines if no liver contraindications."
+      ]
+    },
+    "gastric_acidity": {
+      "title": "Hyperacidity & GERD Lifestyle Care",
+      "urdu_title": "سینے کی جلن اور تیزابیت سے بچاؤ",
+      "steps": [
+        "Avoid sleeping immediately after meals; maintain a 2-3 hour gap.",
+        "Elevate head of the bed slightly.",
+        "Cut down deep-fried foods, excessively spicy meals, and carbonated beverages.",
+        "Drink chilled skimmed milk or fennel seeds (saunf) infused water for soothing relief."
+      ]
+    }
+  }
+}

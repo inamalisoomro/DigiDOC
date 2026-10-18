@@ -1,0 +1,92 @@
+{
+  "specialties": {
+    "Cardiologist": "Dil ke amraaz ke mahir (Heart Specialist)",
+    "Gastroenterologist": "Maiday, jigar aur pait ke mahir (Stomach & Liver Specialist)",
+    "Nephrologist": "Gurdon aur peshab ke nizaam ke mahir (Kidney Specialist)",
+    "Urologist": "Peshab ki nali aur mardana amraaz ke mahir (Urinary Tract & Men's Health Specialist)",
+    "Neurologist": "Dimagh aur aasaab ke mahir (Brain & Nerve Specialist)",
+    "Orthopedic": "Haddiyon aur joron ke mahir (Bone & Joint Specialist)",
+    "Pulmonologist": "Phephron aur saans ke amraaz ke mahir (Chest & Lung Specialist)",
+    "General Physician": "Aam bimariyon aur ibtadayi muainay ke mahir (General Health & Primary Care)"
+  },
+  "doctors": [
+    {
+      "id": "doc-001",
+      "name": "Dr. Tariq Mehmood",
+      "specialty": "Cardiologist",
+      "urdu_specialty": "دل کے امراض کے ماہر (Dil ke amraaz ke mahir)",
+      "qualification": "MBBS, FCPS (Cardiology), Fellowship Interventional Cardiology",
+      "experience": "16 Years",
+      "hospital": "National Institute of Cardiovascular Diseases (NICVD), Karachi",
+      "fee_pkr": 2500,
+      "modes": ["Telehealth", "In-Person"],
+      "rating": 4.9,
+      "available_today": true
+    },
+    {
+      "id": "doc-002",
+      "name": "Dr. Ayesha Siddiqui",
+      "specialty": "Gastroenterologist",
+      "urdu_specialty": "معدے، جگر اور پیٹ کے امراض کی ماہر (Maiday, jigar aur pait ke mahir)",
+      "qualification": "MBBS, MRCP (UK), FCPS (Gastro)",
+      "experience": "12 Years",
+      "hospital": "Aga Khan University Hospital, Karachi",
+      "fee_pkr": 3000,
+      "modes": ["Telehealth", "In-Person"],
+      "rating": 4.8,
+      "available_today": true
+    },
+    {
+      "id": "doc-003",
+      "name": "Dr. Salman Qureshi",
+      "specialty": "Pulmonologist",
+      "urdu_specialty": "پھیپھڑوں اور سانس کے امراض کے ماہر (Phephron aur saans ke amraaz ke mahir)",
+      "qualification": "MBBS, MCPS, FCPS (Pulmonology)",
+      "experience": "14 Years",
+      "hospital": "Shaukat Khanum Hospital / Doctors Hospital, Lahore",
+      "fee_pkr": 2500,
+      "modes": ["Telehealth", "In-Person"],
+      "rating": 4.9,
+      "available_today": true
+    },
+    {
+      "id": "doc-004",
+      "name": "Dr. Farhan Akram",
+      "specialty": "Nephrologist",
+      "urdu_specialty": "گردوں اور پیشاب کے نظام کے ماہر (Gurdon aur peshab ke nizaam ke mahir)",
+      "qualification": "MBBS, FCPS (Nephrology)",
+      "experience": "11 Years",
+      "hospital": "Pakistan Institute of Medical Sciences (PIMS), Islamabad",
+      "fee_pkr": 2200,
+      "modes": ["Telehealth", "In-Person"],
+      "rating": 4.7,
+      "available_today": false
+    },
+    {
+      "id": "doc-005",
+      "name": "Dr. Maria Khan",
+      "specialty": "General Physician",
+      "urdu_specialty": "عام بیماریوں اور ابتدائی معائنے کی ماہر (Aam bimariyon aur ibtadayi muainay ke mahir)",
+      "qualification": "MBBS, MRCGP (Int.)",
+      "experience": "9 Years",
+      "hospital": "Quaid-e-Azam International Hospital, Islamabad",
+      "fee_pkr": 1500,
+      "modes": ["Telehealth", "In-Person"],
+      "rating": 4.9,
+      "available_today": true
+    },
+    {
+      "id": "doc-006",
+      "name": "Dr. Bilal Aslam",
+      "specialty": "Neurologist",
+      "urdu_specialty": "دماغ اور اعصاب کے ماہر (Dimagh aur aasaab ke mahir)",
+      "qualification": "MBBS, FCPS (Neurology)",
+      "experience": "15 Years",
+      "hospital": "Services Hospital, Lahore",
+      "fee_pkr": 2800,
+      "modes": ["In-Person"],
+      "rating": 4.8,
+      "available_today": true
+    }
+  ]
+}

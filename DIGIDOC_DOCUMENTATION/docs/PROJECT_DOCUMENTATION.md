@@ -422,7 +422,7 @@ Every tool must:
 - Use real source-of-truth results, never invented slots or providers.
 - Return structured errors without exposing secrets or sensitive internals.
 
-The included MCP scaffold provides examples of the first five core flows, but backend endpoints and production authorization still need implementation.
+The included MCP server implements all eight core tool contracts with schema validation, authenticated token forwarding, and safe error handling, connecting directly to the backend API specifications.
 
 ---
 

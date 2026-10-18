@@ -1,0 +1,111 @@
+.emergency-alert-banner {
+  width: calc(100% - 32px);
+  max-width: 900px;
+  margin: 10px auto;
+  background: linear-gradient(135deg, rgba(153, 27, 27, 0.95) 0%, rgba(185, 28, 28, 0.9) 100%);
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 35px rgba(239, 68, 68, 0.5);
+  border-radius: 16px;
+  padding: 14px 20px;
+  backdrop-filter: blur(12px);
+  animation: slideDownAlert 0.4s ease-out;
+  z-index: 40;
+}
+
+@keyframes slideDownAlert {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.emergency-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.emergency-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.alert-icon {
+  color: #fef08a;
+  animation: blinkWarn 1s infinite alternate;
+}
+
+@keyframes blinkWarn {
+  from { transform: scale(1); }
+  to { transform: scale(1.15); }
+}
+
+.emergency-text {
+  flex: 1;
+  min-width: 250px;
+}
+
+.emergency-heading {
+  margin: 0 0 4px 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+
+.emergency-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: #fee2e2;
+}
+
+.emergency-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.call-1122-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  color: #b91c1c;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.call-1122-btn:hover {
+  transform: scale(1.05);
+  background: #fef2f2;
+}
+
+.dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #fca5a5;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.dismiss-btn:hover {
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.2);
+}

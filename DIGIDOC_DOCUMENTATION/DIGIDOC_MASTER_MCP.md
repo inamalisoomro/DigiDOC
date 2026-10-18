@@ -1,152 +1,191 @@
 # DigiDoc Master MCP Document
 
-This is the single implementation guide for the DigiDoc MCP server and its connection to the wider healthcare platform.
+This is the canonical implementation and reference guide for the DigiDoc Model Context Protocol (MCP) server and its integration with the DigiDoc healthcare backend.
 
-## 1. Purpose
-The MCP server exposes carefully scoped tools to an AI agent. It is a tool gateway, not a database, a medical model, or an authorization boundary by itself. All sensitive operations must be authorized by the backend.
+---
 
-## 2. Proposed stack
-- Node.js + TypeScript
-- `@modelcontextprotocol/sdk`
-- `zod` for tool input schemas
-- HTTPS authenticated API calls to DigiDoc backend
-- Supabase/PostgreSQL behind the backend
-- A clinician-reviewed deterministic triage service
-- A verified provider directory and actual scheduling adapter
+## 1. Purpose & Architectural Role
 
-## 3. Suggested directory
+The DigiDoc MCP server exposes carefully scoped, deterministic tools to AI clients (e.g., Claude, Antigravity, Open-WebUI). 
 
 ```text
-mcp-server/
-├── src/
-│   ├── index.ts
-│   ├── tools/
-│   │   ├── triage.ts
-│   │   ├── providers.ts
-│   │   ├── scheduling.ts
-│   │   ├── patient-summary.ts
-│   │   └── consent.ts
-│   ├── schemas/
-│   ├── clients/
-│   │   └── digidoc-api.ts
-│   └── tests/
-├── package.json
-├── tsconfig.json
-└── README.md
+┌─────────────────┐       ┌──────────────────────┐       ┌────────────────────────┐
+│   AI Agent /    │  MCP  │  DigiDoc MCP Server  │ HTTP  │ Authenticated DigiDoc  │
+│   LLM Client    │ ────> │ (mcp-server/index.ts)│ ────> │ REST API (Backend)     │
+└─────────────────┘       └──────────────────────┘       └────────────────────────┘
+                                                                     │
+                                                       ┌─────────────┴────────────┐
+                                                       │  - Deterministic Triage  │
+                                                       │  - Verified Doctor Repo  │
+                                                       │  - Live Scheduling Engine│
+                                                       │  - Supabase PostgreSQL   │
+                                                       └──────────────────────────┘
 ```
 
-## 4. Tools and behavior
+**Key Architectural Rules:**
+1. **Tool Gateway, Not Decision Authority:** The MCP server is a transport layer and schema validator. It does not perform clinical triage in-process; all medical decisions are evaluated by the backend deterministic safety engine.
+2. **Identical Authorization Boundary:** MCP tool calls execute under the exact same backend authorization, Row Level Security (RLS), and audit policies as web app user sessions.
+3. **Never Fabricate Data:** Never hallucinate slots, doctor credentials, or bookings. Tools return structured errors (`isError: true`) when records or services are unavailable.
 
-### `get_triage_guidance`
-Input: patient-confirmed symptoms, duration/severity where known, limited relevant history, locale.
-Backend: deterministic policy engine with approved protocol version.
-Output: urgency category, next-step guidance, protocol version, uncertainty flags.
-Restriction: not a diagnosis; never let free-form model output override emergency rules.
+---
 
-### `search_verified_doctors`
-Input: specialty, city or telehealth preference, language, fee limit.
-Backend: return only currently verified providers from the real directory.
-Output: provider ID, sourced name/specialty/language/mode/fee and verification status.
-Restriction: no invented doctors, credentials, ratings, or prices.
+## 2. Technology Stack
 
-### `get_available_slots`
-Input: provider ID, date range, consultation mode.
-Backend: query actual scheduling source.
-Output: real slot IDs, start/end, timezone, source status.
-Restriction: do not make up slots; revalidate at booking time.
+- **Runtime:** Node.js (v20+ LTS recommended) + TypeScript (ES2022 / NodeNext)
+- **SDK:** `@modelcontextprotocol/sdk` (v1.6+) using `McpServer` and `StdioServerTransport`
+- **Validation:** `zod` (v3.24+) for strict input validation
+- **Backend Transport:** HTTPS fetch with bearer authentication, timeout guards (`AbortSignal.timeout`), and `Idempotency-Key` headers
 
-### `book_consultation`
-Input: trusted authenticated patient context, provider ID, slot ID, explicit confirmation, consent choice, idempotency key.
-Backend: validate identity, permissions, consent, provider/slot, slot freshness, and booking idempotency.
-Output: confirmed status only after provider success, plus actual booking reference.
-Restriction: the model must not be able to impersonate a patient by choosing an arbitrary patient ID.
+---
 
-### `cancel_consultation`
-Input: appointment reference, explicit confirmation.
-Backend: verify appointment ownership/role and cancellation policy, then call the scheduler.
-Output: actual cancellation status.
-Restriction: no cancellation based only on model assumption.
+## 3. Directory Layout
 
-### `create_patient_summary`
-Input: patient-confirmed symptoms and relevant history.
-Output: concise draft in selected locale.
-Restriction: draft only; never share with a clinician without separate explicit patient consent.
+The `mcp-server/` directory is fully self-contained with its own dependencies and TypeScript configuration:
 
-### `get_patient_record`
-Input: minimal record selection.
-Backend: infer identity from trusted authentication and enforce row-level/record-level authorization.
-Restriction: avoid arbitrary patient IDs from the LLM.
+```text
+DIGIDOC_DOCUMENTATION/
+├── mcp-server/
+│   ├── index.ts           # Complete MCP server implementation (8 tools)
+│   ├── package.json       # Dependencies, build & run scripts
+│   ├── tsconfig.json      # NodeNext TypeScript compilation setup
+│   └── dist/              # Compiled output (dist/index.js)
+├── docs/
+│   └── PROJECT_DOCUMENTATION.md
+├── .mcp.json              # Local client MCP registration
+└── DIGIDOC_MASTER_MCP.md  # This master document
+```
 
-### `save_patient_consent`
-Input: consent purpose, policy version, granted/revoked state.
-Backend: record audit metadata and enforce the resulting access/sharing policy.
+---
 
-## 5. Security contract
-- Keep MCP server credentials on the server.
-- Use TLS for network transport.
-- Validate every input using a schema.
-- Re-check authorization inside the backend on every tool call.
-- Minimize health data returned to the model.
-- Do not log raw health narratives unless explicitly necessary and protected.
-- Rate-limit calls and use request timeouts.
-- Use idempotency for booking.
-- Require explicit confirmation for consequential actions.
-- Return generic errors that do not leak tokens, patient records, or stack traces.
-- Test prompt injection, unauthorized access, stale slots, duplicate booking, consent revocation, and backend outage.
+## 4. Canonical Tool Contracts
 
-## 6. MCP client configuration example
-The following is a local stdio-style example for a compatible MCP client. Exact file name and environment-variable interpolation differ between clients. Do not assume every editor reads `.mcp.json`.
+The MCP server implements **8 core tools** matching the capabilities defined in `PROJECT_DOCUMENTATION.md`:
+
+| # | Tool Name | HTTP Method & Backend Route | Purpose & Safety Constraint |
+|---|---|---|---|
+| 1 | `get_triage_guidance` | `POST /api/triage/assess` | Evaluates confirmed symptoms against clinician-reviewed protocol. Non-diagnostic. |
+| 2 | `search_verified_doctors` | `GET /api/providers` | Queries only verified doctors by specialty, city, mode, fee, and language. |
+| 3 | `get_available_slots` | `GET /api/providers/:id/slots` | Retrieves real-time slots from provider calendar source. No fabricated slots. |
+| 4 | `book_consultation` | `POST /api/appointments` | Creates verified booking. Requires `patientConfirmed: true` & `idempotencyKey`. |
+| 5 | `cancel_consultation` | `POST /api/appointments/:id/cancel` | Cancels existing booking. Requires `patientConfirmed: true`. |
+| 6 | `create_patient_summary` | `POST /api/intake/sessions/summary-draft` | Builds structured clinical summary draft in Urdu/English for patient review. |
+| 7 | `get_patient_record` | `GET /api/patient/me/records` | Retrieves authorized records for authenticated patient principal only. |
+| 8 | `save_patient_consent` | `POST /api/consents` | Persists explicit patient consent/revocation with immutable audit log. |
+
+---
+
+## 5. Security & Safety Contract
+
+1. **Authentication Token Forwarding:**
+   - Patient-specific tools (`book_consultation`, `cancel_consultation`, `get_patient_record`, `save_patient_consent`) require `patientSessionToken`.
+   - The token is forwarded via `Authorization: Bearer <token>`, guaranteeing that the backend and Supabase RLS enforce patient data segregation.
+   - The LLM can never impersonate another user by fabricating a raw `patientId`.
+
+2. **Action Confirmation Guards:**
+   - Any state-mutating or consequential action (`book_consultation`, `cancel_consultation`) enforces:
+     ```ts
+     patientConfirmed: z.literal(true)
+     ```
+   - The agent cannot book or cancel without explicit patient agreement.
+
+3. **Double-Booking & Idempotency Prevention:**
+   - `book_consultation` requires a minimum 16-character `idempotencyKey` sent in the request header to prevent duplicate appointments during network retries.
+
+4. **Error Sanitization:**
+   - When backend calls fail, the server returns `{ isError: true, content: [{ type: "text", text: "..." }] }`.
+   - Internal database traces and environment secrets are never exposed to the client.
+
+---
+
+## 6. Setup & Compilation
+
+### Installation
+Inside `DIGIDOC_DOCUMENTATION/mcp-server`:
+```bash
+npm install
+```
+
+### Build & Run
+```bash
+# Compile TypeScript to dist/index.js
+npm run build
+
+# Start MCP server in production
+npm start
+
+# Or run directly in development with tsx
+npm run dev
+```
+
+---
+
+## 7. Client Configuration (`.mcp.json`)
+
+To register the server in compatible MCP clients (Antigravity, Claude Desktop, Cursor), configure `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "digidoc-healthcare": {
       "command": "node",
-      "args": ["./mcp-server/dist/index.js"],
+      "args": ["./DIGIDOC_DOCUMENTATION/mcp-server/dist/index.js"],
       "env": {
         "DIGIDOC_API_BASE_URL": "http://localhost:4000",
-        "DIGIDOC_MCP_API_KEY": "SET_THIS_IN_YOUR_LOCAL_ENVIRONMENT"
+        "DIGIDOC_MCP_API_KEY": "YOUR_BACKEND_SERVICE_ROLE_KEY"
       }
     }
   }
 }
 ```
 
-Never commit a real API key. For production, prefer a secret manager and a deployment-specific authenticated transport.
+---
 
-## 7. Example package dependencies
-Install compatible current versions and lock them in your package manager:
+## 8. Backend Routes Specification
 
-```bash
-npm install @modelcontextprotocol/sdk zod
-npm install --save-dev typescript @types/node
+The DigiDoc backend must implement these endpoints to fulfill the MCP server contract:
+
+```text
+POST /api/triage/assess
+  Body: { symptoms, ageYears?, relevantHistory?, locale }
+  Response: { urgencyLevel, protocolVersion, recommendation, emergencyNotice? }
+
+GET /api/providers
+  Query: specialty, city?, telehealth?, language?, maxFee?
+  Response: { providers: [{ id, name, qualification, specialty, fee, modes }] }
+
+GET /api/providers/:id/slots
+  Query: fromISO, toISO, consultationMode
+  Response: { slots: [{ slotId, startTime, endTime, mode, status }] }
+
+POST /api/appointments
+  Headers: Authorization: Bearer <patientSessionToken>, Idempotency-Key: <key>
+  Body: { providerId, slotId, consentToShareSummary, patientConfirmed: true }
+  Response: { appointmentId, status: "confirmed", bookingReference, time }
+
+POST /api/appointments/:id/cancel
+  Headers: Authorization: Bearer <patientSessionToken>
+  Body: { reason?, patientConfirmed: true }
+  Response: { appointmentId, status: "cancelled", timestamp }
+
+POST /api/intake/sessions/summary-draft
+  Headers: Authorization: Bearer <patientSessionToken>
+  Body: { confirmedSymptoms, relevantHistory?, patientQuestions?, locale }
+  Response: { summaryDraftId, formattedSummary, locale, generatedAt }
+
+GET /api/patient/me/records
+  Headers: Authorization: Bearer <patientSessionToken>
+  Query: type (all | appointments | summaries | documents)
+  Response: { records: [...] }
+
+POST /api/consents
+  Headers: Authorization: Bearer <patientSessionToken>
+  Body: { purpose, policyVersion, granted }
+  Response: { consentId, status: "recorded", timestamp }
 ```
 
-Configure TypeScript to compile `src/index.ts` into `dist/index.js` and use an ESM-compatible setup consistent with the SDK version. Verify the official SDK docs for the installed version rather than copying outdated API examples blindly.
+---
 
-## 8. Backend routes to implement
-- `POST /internal/triage/guidance`
-- `POST /internal/providers/search-verified`
-- `POST /internal/scheduling/available-slots`
-- `POST /internal/scheduling/book`
-- `POST /internal/scheduling/cancel`
-- `POST /internal/patients/summary-draft`
-- `GET /internal/patients/me/records`
-- `POST /internal/consents`
+## 9. Demo Mode vs. Production
 
-These are proposed endpoints, not pre-existing services. Protect them with service authentication, user-context authorization, input validation, rate limits, and audit events.
-
-## 9. Demo mode versus production
-In demo mode, use clearly labeled synthetic providers and fake slots; do not contact real patients or imply a real booking exists. In production, fail closed when verified provider data, scheduler configuration, approved triage protocol, or required consent is missing.
-
-## 10. Release checklist
-- [ ] MCP server starts and tools appear in the selected client.
-- [ ] Every tool validates input.
-- [ ] Every sensitive tool uses trusted identity and backend authorization.
-- [ ] Red-flag rules are clinician-approved and tested.
-- [ ] Provider data is verified and current.
-- [ ] Slots come from a real scheduling source.
-- [ ] Booking requires explicit confirmation and idempotency.
-- [ ] Consent controls sharing.
-- [ ] Secrets and health data are redacted from logs.
-- [ ] Security and clinical validation are complete.
+- **In Demo Mode (`DEMO_MODE=true`):** The backend returns clearly labeled synthetic provider names and mock slot references with an explicit `[DEMO DATA - NOT REAL CARE]` disclaimer.
+- **In Production (`DEMO_MODE=false`):** The backend must strictly verify PMDC/PMC doctor credentials, connect to real clinic calendar APIs, and require a licensed clinical protocol version. If any component is unconfigured, the system fails closed with a clear error.

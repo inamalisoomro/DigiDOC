@@ -1,0 +1,121 @@
+.chat-input-wrapper {
+  width: 100%;
+  max-width: 680px;
+  margin: 15px auto 25px auto;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 15;
+}
+
+.chat-input-capsule {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  background: rgba(14, 27, 54, 0.7);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  backdrop-filter: blur(16px);
+  border-radius: 9999px;
+  padding: 6px 8px 6px 14px;
+  box-shadow: 
+    0 10px 30px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(30, 58, 138, 0.25);
+  transition: all 0.25s ease;
+}
+
+.chat-input-capsule:focus-within {
+  border-color: #38bdf8;
+  box-shadow: 
+    0 10px 35px rgba(0, 0, 0, 0.5),
+    0 0 25px rgba(56, 189, 248, 0.35);
+}
+
+.capsule-addon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.capsule-addon-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #38bdf8;
+  border-color: #38bdf8;
+}
+
+.capsule-input-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #f8fafc;
+  font-size: 0.95rem;
+  padding: 0 14px;
+}
+
+.capsule-input-field::placeholder {
+  color: #64748b;
+}
+
+.capsule-submit-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 15px rgba(37, 99, 235, 0.4);
+  flex-shrink: 0;
+}
+
+.capsule-submit-btn:hover:not(:disabled) {
+  background: #3b82f6;
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+}
+
+.capsule-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.capsule-submit-btn.listening-active {
+  background: #ef4444;
+  animation: pulseMic 1.2s infinite ease-in-out;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes pulseMic {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.medical-disclaimer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 0.75rem;
+  text-align: center;
+  padding: 0 10px;
+}
+
+.disclaimer-icon {
+  color: #38bdf8;
+  flex-shrink: 0;
+}

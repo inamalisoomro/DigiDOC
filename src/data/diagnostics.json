@@ -1,0 +1,64 @@
+{
+  "conditions": [
+    {
+      "id": "acute-gastroenteritis",
+      "name_en": "Acute Gastroenteritis / Food Poisoning",
+      "name_ur": "پیٹ کا انفیکشن / فوڈ پوائزننگ",
+      "primary_symptoms": ["vomiting", "watery diarrhea", "stomach cramps", "low-grade fever", "nausea"],
+      "urgency": "moderate",
+      "specialist_needed": "Gastroenterologist",
+      "red_flags": ["blood in stool", "inability to retain fluids for >24 hours", "signs of severe dehydration", "high fever > 102F"],
+      "home_care": ["Oral Rehydration Salts (ORS / Nimkol)", "Clear fluids and boiled water", "Khichdi and banana", "Avoid oily/spicy foods"]
+    },
+    {
+      "id": "acute-coronary-syndrome",
+      "name_en": "Acute Coronary Syndrome / Heart Attack",
+      "name_ur": "دل کا دورہ / اینجائنا",
+      "primary_symptoms": ["severe chest pain", "chest tightness / pressure", "radiating pain to left arm, neck or jaw", "sudden sweating", "shortness of breath"],
+      "urgency": "critical_emergency",
+      "specialist_needed": "Cardiologist",
+      "red_flags": ["crushing central chest pressure", "shortness of breath", "cold clammy sweat", "dizziness / syncope"],
+      "home_care": ["IMMEDIATE EMERGENCY: Call Rescue 1122 or rush to nearest emergency room", "Chew Disprin (aspirin 300mg) if not allergic while waiting for transport"]
+    },
+    {
+      "id": "type-2-diabetes",
+      "name_en": "Type 2 Diabetes Mellitus",
+      "name_ur": "ذیابیطس / شوگر",
+      "primary_symptoms": ["frequent urination", "excessive thirst", "unexplained weight loss", "fatigue", "blurred vision", "slow healing wounds"],
+      "urgency": "routine",
+      "specialist_needed": "Endocrinologist / Diabetologist",
+      "red_flags": ["fruity breath odor", "extreme vomiting / dehydration (DKA signs)", "confusion / drowsiness", "blood glucose > 400 mg/dL"],
+      "home_care": ["Regular blood sugar monitoring", "Low glycemic index diet", "30 mins daily brisk walking", "Consult physician for medication"]
+    },
+    {
+      "id": "hypertension",
+      "name_en": "Essential Hypertension",
+      "name_ur": "ہائی بلڈ پریشر",
+      "primary_symptoms": ["often asymptomatic", "morning occipital headache", "dizziness", "palpitations", "visual disturbances"],
+      "urgency": "routine",
+      "specialist_needed": "Cardiologist / General Physician",
+      "red_flags": ["BP > 180/120 mmHg (Hypertensive Crisis)", "sudden neurological deficit", "severe chest pain", "confusion"],
+      "home_care": ["Reduce dietary sodium/salt", "Weight management", "Stress reduction", "Regular BP diary"]
+    },
+    {
+      "id": "urinary-tract-infection",
+      "name_en": "Urinary Tract Infection (UTI)",
+      "name_ur": "پیشاب کی نالی کا انفیکشن",
+      "primary_symptoms": ["burning micturition", "frequency", "urgency", "lower abdominal discomfort", "cloudy or foul-smelling urine"],
+      "urgency": "moderate",
+      "specialist_needed": "Nephrologist / Urologist",
+      "red_flags": ["high spiking fever with rigors", "flank/kidney pain (Pyelonephritis signs)", "visible blood in urine"],
+      "home_care": ["Drink 10-12 glasses of water daily", "Cranberry juice / alkaline sachet as supportive", "Do not hold urine", "Urine Complete Examination (Urine R/E) recommended"]
+    },
+    {
+      "id": "acute-respiratory-infection",
+      "name_en": "Acute Viral Respiratory Tract Infection",
+      "name_ur": "سانس کا وائرل انفیکشن / نزلہ زکام",
+      "primary_symptoms": ["cough", "sore throat", "runny nose", "body aches", "mild fever"],
+      "urgency": "mild",
+      "specialist_needed": "Pulmonologist / General Physician",
+      "red_flags": ["difficulty breathing / wheezing", "oxygen saturation < 93%", "coughing blood", "stridor"],
+      "home_care": ["Warm saline gargles", "Steam inhalation", "Honey and warm liquids", "Rest and paracetamol for fever"]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "parameters": [
+    {
+      "test_name": "Fasting Blood Glucose",
+      "urdu_name": "نہار منہ شوگر (Fasting Sugar)",
+      "standard_range": "70 - 99 mg/dL",
+      "pre_diabetic": "100 - 125 mg/dL",
+      "diabetic": ">= 126 mg/dL",
+      "explanation_ur": "نہار منہ خون میں شکر کی مقدار۔ 126 سے زائد ذیابیطس (شوگر) کی نشاندہی کرتی ہے۔"
+    },
+    {
+      "test_name": "HbA1c (Glycated Hemoglobin)",
+      "urdu_name": "تین ماہ کی اوسط شوگر (HbA1c)",
+      "standard_range": "< 5.7%",
+      "pre_diabetic": "5.7% - 6.4%",
+      "diabetic": ">= 6.5%",
+      "explanation_ur": "پچھلے تین ماہ کی اوسط شوگر۔ 6.5 سے اوپر شوگر کی مستقل موجودگی ظاہر کرتی ہے۔"
+    },
+    {
+      "test_name": "Serum Creatinine",
+      "urdu_name": "سیرم کریٹینائن (گردوں کا ٹیسٹ)",
+      "standard_range": "0.6 - 1.2 mg/dL",
+      "critical_high": "> 1.5 mg/dL",
+      "explanation_ur": "کریٹینائن کا بڑھنا گردوں (Kidneys) کے فلٹر کرنے کے نظام پر اثر ظاہر کرتا ہے۔"
+    },
+    {
+      "test_name": "Hemoglobin (Hb - CBC)",
+      "urdu_name": "خون میں ہیموگلوبن (خون کی مقدار)",
+      "standard_range_male": "13.5 - 17.5 g/dL",
+      "standard_range_female": "12.0 - 15.5 g/dL",
+      "anemia_severe": "< 8.0 g/dL",
+      "explanation_ur": "خون کے سرخ خلیوں میں آکسیجن پہنچانے والا عنصر۔ کمی انیمیا (خون کی کمی) کہلاتی ہے۔"
+    },
+    {
+      "test_name": "Platelets Count (CBC)",
+      "urdu_name": "پلیٹلیٹس (خون جمانے والے خلیے)",
+      "standard_range": "150,000 - 450,000 /mcL",
+      "critical_low": "< 50,000 /mcL (Dengue warning)",
+      "explanation_ur": "خون جمانے کے ضروری ذرات۔ ڈینگی اور دیگر انفیکشنز میں خطرناک حد تک گر سکتے ہیں۔"
+    },
+    {
+      "test_name": "Alanine Aminotransferase (ALT / SGPT)",
+      "urdu_name": "جگر کے خامرے (SGPT / ALT)",
+      "standard_range": "7 - 56 U/L",
+      "critical_high": "> 150 U/L",
+      "explanation_ur": "جگر (Liver) کی صحت کا اندازہ لگانے والا ٹیسٹ۔ زیادہ ہونے کا مطلب جگر پر ورم یا سوزش ہو سکتی ہے۔"
+    },
+    {
+      "test_name": "Uric Acid",
+      "urdu_name": "یورک ایسڈ",
+      "standard_range_male": "3.4 - 7.0 mg/dL",
+      "standard_range_female": "2.4 - 6.0 mg/dL",
+      "explanation_ur": "اضافے سے جوڑوں خصوصاً پاؤں کے انگوٹھے میں شدید درد اور یورک ایسڈ کی پتھری بن سکتی ہے۔"
+    }
+  ]
+}
