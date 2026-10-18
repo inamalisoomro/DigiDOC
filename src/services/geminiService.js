@@ -117,27 +117,43 @@ export class GeminiService {
           { role: 'user', content: userMessage }
         ];
 
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'qwen/qwen3.8-27b',
-            messages,
-            temperature: 0.35,
-            max_tokens: 700
-          })
-        });
+        const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+        let reply = '';
+        let lastError = null;
 
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error?.message || `Groq API error ${res.status}`);
+        for (const model of groqModels) {
+          try {
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model,
+                messages,
+                temperature: 0.35,
+                max_tokens: 850
+              })
+            });
+
+            if (!res.ok) {
+              const errJson = await res.json().catch(() => ({}));
+              throw new Error(errJson.error?.message || `Groq API error ${res.status}`);
+            }
+
+            const data = await res.json();
+            reply = data.choices?.[0]?.message?.content || '';
+            if (reply) break;
+          } catch (err) {
+            lastError = err;
+            console.warn(`Groq model ${model} failed, trying fallback:`, err);
+          }
         }
 
-        const data = await res.json();
-        const reply = data.choices?.[0]?.message?.content || '';
+        if (!reply) {
+          throw lastError || new Error('No response from Groq API');
+        }
 
         this.history.push({ role: 'user', parts: [{ text: userMessage }] });
         this.history.push({ role: 'model', parts: [{ text: reply }] });
