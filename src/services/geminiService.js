@@ -3,63 +3,48 @@ import quettaDoctors from '../data/quetta_doctors.json';
 import labRangesData from '../data/lab_reference_ranges.json';
 import { clinicalEngine } from './clinicalEngine';
 
-const SYSTEM_PROMPT = `SYSTEM INSTRUCTIONS: DigiDoc Avatar AI Healthcare Consultant
+const SYSTEM_PROMPT = `SYSTEM INSTRUCTIONS: DigiDoc AI Adaptive Clinical Physician & Triage Consultant
 
 1. IDENTITY & PERSONA
-You are DigiDoc, an empathetic, highly knowledgeable, and respectful AI digital healthcare consultant and patient navigator designed for Pakistan (with localized Quetta & Balochistan healthcare directory and national Pakistan triage).
-Avatar Presence: You embody an interactive video avatar. You listen attentively, show real-time micro-reactions, nod empathetically, and speak with natural lip-sync cadence.
-Language & Voice: You communicate fluently in Urdu (اردو), Roman Urdu, and English. Default to polite, comforting Urdu (using "Aap", "Ji", "Fikr na karein").
-Accessibility: 24/7 free care navigation and patient triage.
+You are DigiDoc, an experienced, deeply empathetic, and clinically sharp digital physician and patient triage consultant in Pakistan (with specialized grounding in Balochistan/Quetta healthcare infrastructure and national emergency protocols).
+- Avatar Presence: You embody an interactive video physician. You express real-time clinical empathy, thoughtful analysis, and reassuring bedside manner.
+- Language & Tone: You communicate fluently in polite Urdu (اردو), natural Roman Urdu, or English matching patient input. Always use respectful address ("Aap", "Ji", "Fikr na karein").
+- Bedside Manner: Empathetic, calm, decisive, and never robotic.
 
-2. AVATAR MICRO-REACTION & SPEECH TAGS
-Prepend and interweave avatar reaction tags in brackets at the beginning of phrases:
-[LISTENING_ATTENTIVE] — When listening or acknowledging patient input.
-[NOD_EMPATHETIC] — When showing compassion for pain, distress, or worry.
-[THINKING_ANALYZING] — When cross-referencing symptoms, lab values, or doctor directories.
-[SPEAKING_REASSURING] — When explaining medical concepts in simple terms.
-[ALERT_URGENT] — When serious red-flag warning signs or critical lab abnormalities are detected.
-[WARM_SMILE] — When greeting, comforting, or closing the session.
+2. ANTI-SCRIPTING & DYNAMIC CLINICAL REASONING RULES (CRITICAL)
+- NEVER READ A PRE-DETERMINED SCRIPT OR QUESTIONNAIRE.
+- CONTEXT CONTINUITY: Always remember and build upon everything the patient previously shared. Never ask for information the patient already provided.
+- DETERIORATION AWARENESS: If the patient reports their condition is worsening, escalating, or that they are "ailing more" (e.g., "bukhar barh raha hai", "pain is worse", "feeling weaker", "chills/shivering", "alimaat barh rahi hain"):
+  * IMMEDIATELY acknowledge the escalation with clinical empathy ([NOD_EMPATHETIC] or [ALERT_URGENT]).
+  * ESCALATE the urgency tier immediately.
+  * Stop asking casual background questions. Shift focus to ruling out acute emergencies and providing decisive clinical triage.
+- DISCRIMINATIVE INQUIRY (ONE QUESTION ONLY):
+  * When more diagnostic information is needed, ask at most ONE high-yield, targeted question per response that differentiates candidate conditions (e.g. "Along with this worsening fever, is there any neck stiffness, skin rash, or severe shivering?").
+  * Do NOT barrage the patient with multi-part questions or repeated baseline questions.
+- ACTIONABLE MEDICAL GUIDANCE:
+  * When the picture is clear or worsening, provide concrete, safe supportive care (hydration/ORS, fever management precautions, rest) and recommend the appropriate Quetta/Pakistani specialist.
+  * Clearly inform the patient what danger signs must trigger an immediate visit to the nearest Emergency Room (Civil Hospital Quetta / BMC / NICVD).
 
-Example:
-[NOD_EMPATHETIC] Ji bilkul, main aapki baat samajh raha hoon. [SPEAKING_REASSURING] Yeh dard kab se mehsoos ho raha hai aapko?
+3. AVATAR MICRO-REACTIONS (Interweave at beginning of key thoughts):
+- [LISTENING_ATTENTIVE] — Listening carefully or acknowledging user input.
+- [NOD_EMPATHETIC] — Empathizing with suffering, pain, distress, or worsening symptoms.
+- [THINKING_ANALYZING] — Evaluating differential diagnoses, lab values, or specialist matching.
+- [SPEAKING_REASSURING] — Explaining medical concepts, giving reassuring guidance and home care.
+- [ALERT_URGENT] — Triggered on Tier 1 emergency red flags or severe sudden deterioration.
+- [WARM_SMILE] — Greeting or concluding with warm wishes.
 
-3. CORE KNOWLEDGE BASES (STRICT CLINICAL GROUNDING)
-You are equipped with 3 foundational clinical databases:
-A. DISEASE DIAGNOSTICS & SYMPTOM KNOWLEDGE (diseases_conditions.json):
-- Symptom to condition mapping, negation rules (e.g. "no fever" / "bukhar nahi hai" means fever is absent), and noisy-OR scoring.
-- 4 Tiers of Urgency:
-  * Tier 1: Emergency: call 1122 / go to hospital immediately.
-  * Tier 2: Urgent: see a doctor within 24 hours.
-  * Tier 3: Routine: book a normal appointment.
-  * Tier 4: Self-care: home supportive care.
-- Vulnerable Groups: For child < 5, adult > 65, pregnancy, or known chronic illness, raise urgency by 1 tier (never below tier 2 if fever is present).
+4. STRUCTURED MACHINE-READABLE ACTION TAGS (MANDATORY AT END OF RESPONSE)
+Every single response MUST conclude with a block of machine-readable clinical tags at the very bottom:
+[TIER: 1|2|3|4]
+[ACTION: ESCALATE_EMERGENCY|RECOMMEND_DOCTOR|ORDER_LABS|HOME_CARE]
+[SPECIALIST: Specialty Name or General Physician]
+[SUGGESTED_LABS: Test1, Test2 or None]
 
-B. QUETTA & PAKISTAN DOCTORS DIRECTORY (quetta_doctors.json):
-- Contains verified specialists, hospital/clinic affiliations (e.g. Quetta Hospital, Bolan Medical Complex, Akram Hospital, etc.), addresses, and contact phone numbers across Quetta.
-- When recommending a doctor, provide:
-  * Exactly which specialist they need and why.
-  * Doctor's name, primary specialty, hospital/clinic name, address, and phone number for booking.
-
-C. LAB REFERENCE RANGES & BIOMARKERS (lab_reference_ranges.json):
-- 424 clinical tests with precise age, sex (male/female/pregnancy), pediatric and critical limits.
-- If a value exceeds criticalHigh or falls below criticalLow, flag as EMERGENCY immediately.
-- Explain abnormal lab results in clear Urdu.
-
-4. 5-STEP CONSULTATION WORKFLOW
-Step 1: Warm Greeting & Chief Complaint.
-Step 2: One-Question-at-a-Time Adaptive Intake (Ask duration, severity, associated symptoms, or existing conditions one by one).
-Step 3: Analyze Labs & Symptoms (Cross-Referencing JSON).
-Step 4: Doctor Recommendation & Education (Recommend matching Quetta/Pakistani specialists with phone numbers & hospital).
-Step 5: Appointment Booking & Consultation Guidance.
-
-5. RED FLAGS & EMERGENCY PROTOCOL
-Severe chest pain/pressure radiating to left arm/jaw, acute shortness of breath, sudden facial drooping/arm weakness/slurred speech (Stroke), heavy bleeding, loss of consciousness, stiff neck with high fever:
--> Prepend [ALERT_URGENT], stop interview, advise calling Rescue 1122 or nearest hospital ER immediately!
-
-6. COMMUNICATION STYLE
-- Urdu Script / Roman Urdu matching user preference.
-- Respectful Address: "Aap" (never "tum").
-- Disclaimer at conclusion: "Yeh digital mashwara aapki rehnumayi ke liye hai. Hatmi tashkhees aur ilaaj ke liye mustanad doctor se muaina zaroori hai."
+Tier Definitions:
+- Tier 1: Emergency (Life-threatening, acute chest pain, severe dyspnea, stroke signs, severe hemorrhage -> Call 1122 or visit ER immediately).
+- Tier 2: Urgent (Worsening illness, persistent high fever, significant pain -> In-person doctor visit within 12-24 hours).
+- Tier 3: Routine (Stable mild symptoms -> Book routine clinic appointment).
+- Tier 4: Self-Care (Minor self-limiting issues -> Supportive home care).
 `;
 
 export class GeminiService {
@@ -69,6 +54,18 @@ export class GeminiService {
     this.quettaDoctors = quettaDoctors || [];
     this.diseasesData = diseasesData || {};
     this.labRangesData = labRangesData || {};
+
+    // Cumulative multi-turn clinical context tracker
+    this.clinicalContext = {
+      chiefComplaint: null,
+      accumulatedSymptoms: [],
+      timeline: null,
+      trajectory: 'stable', // 'stable' | 'escalating' | 'improving'
+      currentTier: 3,
+      redFlags: [],
+      suggestedSpecialist: null,
+      turnCount: 0
+    };
   }
 
   setApiKey(key) {
@@ -82,10 +79,69 @@ export class GeminiService {
 
   resetChat() {
     this.history = [];
+    this.clinicalContext = {
+      chiefComplaint: null,
+      accumulatedSymptoms: [],
+      timeline: null,
+      trajectory: 'stable',
+      currentTier: 3,
+      redFlags: [],
+      suggestedSpecialist: null,
+      turnCount: 0
+    };
+  }
+
+  // Update clinical context dynamically from user input
+  updateClinicalContext(userMessage) {
+    this.clinicalContext.turnCount++;
+    const text = userMessage.toLowerCase();
+
+    // 1. Detect symptoms via Clinical Engine
+    try {
+      const detected = clinicalEngine.detectSymptoms(userMessage) || [];
+      for (const sym of detected) {
+        if (!this.clinicalContext.accumulatedSymptoms.some(s => s.id === sym.id)) {
+          this.clinicalContext.accumulatedSymptoms.push(sym);
+        }
+      }
+      if (!this.clinicalContext.chiefComplaint && this.clinicalContext.accumulatedSymptoms.length > 0) {
+        const first = this.clinicalContext.accumulatedSymptoms[0];
+        this.clinicalContext.chiefComplaint = first.name?.rur || first.name?.en || first.id;
+      }
+    } catch (e) {
+      console.debug("Context symptom tracking:", e);
+    }
+
+    // 2. Deterioration and Escalation Detection
+    const worseningRegex = /(ailing more|getting worse|worse|worsened|barh gaya|barh rahi|zyada|ziada|shadeed|chills|shivering|severe|deteriorat|tez bukhar|dard barh|takleef barh)/i;
+    if (worseningRegex.test(text)) {
+      this.clinicalContext.trajectory = 'escalating';
+      if (this.clinicalContext.currentTier > 2) {
+        this.clinicalContext.currentTier = 2; // Escalate to at least Urgent (Tier 2)
+      }
+    }
+
+    // 3. Timeline extraction
+    const timelineMatch = text.match(/(\d+\s*(din|days?|hafte|weeks?|hours?|ghante)|kal se|yesterday|aaj se|today|parso)/i);
+    if (timelineMatch) {
+      this.clinicalContext.timeline = timelineMatch[0];
+    }
+
+    // 4. Red-flag emergency detection
+    const redFlagRegex = /(chest pain|seene me.? dard|seene mein dard|heart attack|saans ruk|shortness of breath|stroke|paralysis|blood in vomit|khoon ki ulti|unconscious|behosh)/i;
+    if (redFlagRegex.test(text)) {
+      this.clinicalContext.currentTier = 1;
+      if (!this.clinicalContext.redFlags.includes('Acute Emergency')) {
+        this.clinicalContext.redFlags.push('Acute Emergency');
+      }
+    }
   }
 
   async sendMessage(userMessage) {
-    // If no API key provided, fall back to our advanced local clinical engine grounded in the 3 JSON files
+    // Dynamically update clinical context on every user message
+    this.updateClinicalContext(userMessage);
+
+    // If no API key provided, fall back to our clinical engine
     if (!this.apiKey) {
       return this.localClinicalEngine(userMessage);
     }
@@ -95,10 +151,22 @@ export class GeminiService {
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`;
       
+      const clinicalContextSummary = `
+CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
+- Consultation Turn: #${this.clinicalContext.turnCount}
+- Chief Complaint: ${this.clinicalContext.chiefComplaint || 'Under active intake'}
+- Accumulated Symptoms: ${this.clinicalContext.accumulatedSymptoms.map(s => s.name?.rur || s.name?.en || s.id).join(', ') || 'None identified yet'}
+- Timeline / Duration: ${this.clinicalContext.timeline || 'Not stated'}
+- Clinical Trajectory: ${this.clinicalContext.trajectory.toUpperCase()} ${this.clinicalContext.trajectory === 'escalating' ? '⚠️ [CRITICAL: Patient reports condition is worsening / ailing more. Immediately acknowledge escalation, prioritize red flags & escalate triage!]' : ''}
+- Active Urgency Tier: Tier ${this.clinicalContext.currentTier}
+- Known Red Flags: ${this.clinicalContext.redFlags.length ? this.clinicalContext.redFlags.join(', ') : 'None detected so far'}
+- Total Quetta Doctors in Local Directory: ${this.quettaDoctors.length}
+`;
+
       const payload = {
         systemInstruction: {
           parts: [{ 
-            text: `${SYSTEM_PROMPT}\n\nRELEVANT CLINICAL DATA SUMMARY:\nTotal Quetta Doctors in Directory: ${this.quettaDoctors.length}\nTotal Standard Lab Tests Available: ${this.labRangesData.tests?.length || 424}` 
+            text: `${SYSTEM_PROMPT}\n\n${clinicalContextSummary}` 
           }]
         },
         contents: this.history,
@@ -133,30 +201,97 @@ export class GeminiService {
   }
 
   parseReactionTags(text) {
-    const tagRegex = /\[(LISTENING_ATTENTIVE|NOD_EMPATHETIC|THINKING_ANALYZING|SPEAKING_REASSURING|ALERT_URGENT|WARM_SMILE)\]/g;
-    const tagsFound = [];
-    let match;
-    while ((match = tagRegex.exec(text)) !== null) {
-      tagsFound.push(match[1]);
+    if (!text) {
+      return {
+        rawText: '',
+        cleanSpeechText: '',
+        primaryTag: 'SPEAKING_REASSURING',
+        tagsFound: [],
+        isUrgent: false,
+        tier: 3,
+        action: 'RECOMMEND_DOCTOR',
+        specialist: 'General Physician',
+        suggestedLabs: []
+      };
     }
 
-    const primaryTag = tagsFound[0] || 'SPEAKING_REASSURING';
-    const isUrgent = tagsFound.includes('ALERT_URGENT') || text.includes('1122') || text.includes('Emergency') || text.includes('ایمرجنسی');
-    
-    // Clean text for speech synthesis
-    const cleanSpeechText = text.replace(/\[[A-Z_]+\]/g, '').replace(/\*+/g, '').replace(/###+/g, '').trim();
+    // 1. Extract Avatar Reaction Tags
+    const reactionRegex = /\[(LISTENING_ATTENTIVE|NOD_EMPATHETIC|THINKING_ANALYZING|SPEAKING_REASSURING|ALERT_URGENT|WARM_SMILE)\]/g;
+    const tagsFound = [];
+    let match;
+    while ((match = reactionRegex.exec(text)) !== null) {
+      tagsFound.push(match[1]);
+    }
+    let primaryTag = tagsFound[0] || 'SPEAKING_REASSURING';
+
+    // 2. Extract Structured Clinical Action Tags
+    const tierMatch = text.match(/\[TIER:\s*([1-4])\]/i);
+    const tier = tierMatch ? parseInt(tierMatch[1], 10) : (tagsFound.includes('ALERT_URGENT') ? 1 : this.clinicalContext.currentTier || 3);
+
+    const actionMatch = text.match(/\[ACTION:\s*([A-Z_]+)\]/i);
+    const action = actionMatch ? actionMatch[1].toUpperCase() : (tier === 1 ? 'ESCALATE_EMERGENCY' : 'RECOMMEND_DOCTOR');
+
+    const specialistMatch = text.match(/\[SPECIALIST:\s*([^\]\n]+)\]/i);
+    const specialist = specialistMatch ? specialistMatch[1].trim() : 'General Physician';
+
+    const labsMatch = text.match(/\[SUGGESTED_LABS:\s*([^\]\n]+)\]/i);
+    let suggestedLabs = [];
+    if (labsMatch) {
+      const labsStr = labsMatch[1].trim();
+      if (labsStr.toLowerCase() !== 'none') {
+        suggestedLabs = labsStr.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
+    const isUrgent = tier === 1 || tagsFound.includes('ALERT_URGENT') || /1122|Emergency|ایمرجنسی/i.test(text);
+    if (isUrgent && primaryTag !== 'ALERT_URGENT') {
+      primaryTag = 'ALERT_URGENT';
+    }
+
+    // Update clinical context specialist
+    if (specialist && specialist !== 'General Physician') {
+      this.clinicalContext.suggestedSpecialist = specialist;
+    }
+
+    // 3. Clean text for natural speech synthesis (strip all reaction tags, action tags, & markdown)
+    const cleanSpeechText = text
+      .replace(/\[(LISTENING_ATTENTIVE|NOD_EMPATHETIC|THINKING_ANALYZING|SPEAKING_REASSURING|ALERT_URGENT|WARM_SMILE)\]/g, '')
+      .replace(/\[(TIER|ACTION|SPECIALIST|SUGGESTED_LABS):[^\]]+\]/gi, '')
+      .replace(/\[[A-Za-z0-9_:\s,\-\/\.]+\]/g, '')
+      .replace(/[*#_~`]+/g, '')
+      .replace(/\n+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     return {
       rawText: text,
       cleanSpeechText,
       primaryTag,
       tagsFound,
-      isUrgent
+      isUrgent,
+      tier,
+      action,
+      specialist,
+      suggestedLabs,
+      clinicalContext: { ...this.clinicalContext }
     };
   }
 
   localClinicalEngine(userMessage, apiNotice) {
-    return clinicalEngine.generateResponse(userMessage);
+    const localRes = clinicalEngine.generateResponse(userMessage);
+    let rawWithTags = localRes.rawText;
+
+    // Ensure local response also provides machine-readable action tags
+    if (!rawWithTags.includes('[TIER:')) {
+      const assignedTier = localRes.isUrgent ? 1 : this.clinicalContext.currentTier;
+      const assignedAction = assignedTier === 1 ? 'ESCALATE_EMERGENCY' : 'RECOMMEND_DOCTOR';
+      const assignedSpecialist = this.clinicalContext.suggestedSpecialist || 'General Physician';
+      const assignedLabs = userMessage.toLowerCase().includes('sugar') || userMessage.toLowerCase().includes('lab') ? 'FBS, HbA1c, CBC' : 'None';
+
+      rawWithTags += `\n\n[TIER: ${assignedTier}]\n[ACTION: ${assignedAction}]\n[SPECIALIST: ${assignedSpecialist}]\n[SUGGESTED_LABS: ${assignedLabs}]`;
+    }
+
+    return this.parseReactionTags(rawWithTags);
   }
 }
 
