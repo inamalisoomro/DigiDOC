@@ -119,3 +119,47 @@
   color: #38bdf8;
   flex-shrink: 0;
 }
+
+@media (max-width: 768px) {
+  .chat-input-wrapper {
+    width: 100%;
+    max-width: 100%;
+    margin: 6px auto 2px auto;
+    padding: 0 12px;
+    gap: 4px;
+  }
+
+  .chat-input-capsule {
+    padding: 4px 6px 4px 12px;
+    background: rgba(14, 27, 54, 0.88);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(30, 58, 138, 0.3);
+  }
+
+  .capsule-addon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .capsule-input-field {
+    font-size: 16px; /* Prevents auto-zoom on mobile inputs */
+    padding: 0 10px;
+  }
+
+  .capsule-submit-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .medical-disclaimer {
+    font-size: 0.68rem;
+    line-height: 1.25;
+    padding: 0 8px;
+    gap: 4px;
+  }
+
+  .disclaimer-icon {
+    width: 13px;
+    height: 13px;
+  }
+}
+

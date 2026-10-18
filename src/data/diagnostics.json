@@ -9,7 +9,8 @@
       "specialist_needed": "Gastroenterologist",
       "red_flags": ["blood in stool", "inability to retain fluids for >24 hours", "signs of severe dehydration", "high fever > 102F"],
       "home_care": ["Oral Rehydration Salts (ORS / Nimkol)", "Clear fluids and boiled water", "Khichdi and banana", "Avoid oily/spicy foods"]
-    },
+    }, 
+    
     {
       "id": "acute-coronary-syndrome",
       "name_en": "Acute Coronary Syndrome / Heart Attack",

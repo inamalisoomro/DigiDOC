@@ -23,6 +23,7 @@ body {
   display: flex;
   width: 100vw;
   min-height: 100vh;
+  min-height: 100dvh;
   background: 
     radial-gradient(ellipse at 50% 25%, rgba(15, 76, 129, 0.28) 0%, transparent 65%),
     radial-gradient(ellipse at 80% 80%, rgba(30, 58, 138, 0.15) 0%, transparent 60%),
@@ -37,14 +38,10 @@ body {
   flex-direction: column;
   justify-content: space-between;
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
   padding-bottom: 10px;
-}
-
-@media (max-width: 768px) {
-  .main-viewport {
-    padding-bottom: 70px;
-  }
+  overflow-x: hidden;
 }
 
 .central-stage {
@@ -55,6 +52,74 @@ body {
   padding: 10px 16px;
   position: relative;
   width: 100%;
+}
+
+@media (max-width: 768px) {
+  .digidoc-app-layout {
+    width: 100%;
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .main-viewport {
+    min-height: 100dvh;
+    height: 100%;
+    padding-bottom: calc(65px + env(safe-area-inset-bottom, 0px));
+    justify-content: space-between;
+    overflow-x: hidden;
+  }
+
+  /* Doctor avatar is the centerpiece highlight in the middle of the screen */
+  .central-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    width: 100%;
+    min-height: 0;
+    order: 2;
+  }
+
+  /* Hearing transcript right above chat input */
+  .live-hearing-bubble {
+    order: 3;
+    margin: 2px auto 4px auto;
+    font-size: 0.74rem;
+    padding: 4px 12px;
+    max-width: calc(100% - 24px);
+  }
+
+  /* Text input and speak-to-touch button directly below the doctor avatar */
+  .chat-input-wrapper {
+    order: 4;
+    margin: 4px auto 2px auto;
+    width: 100%;
+  }
+
+  /* Quick action buttons below the chat input */
+  .quick-actions-bar {
+    order: 5;
+    margin: 2px auto 4px auto;
+  }
+
+  .hands-free-status-banner {
+    gap: 8px;
+    padding: 4px 10px;
+    font-size: 0.7rem;
+    max-width: calc(100% - 20px);
+    margin: 2px auto;
+    text-align: center;
+  }
+
+  .stop-voice-btn {
+    padding: 2px 6px;
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
 }
 
 /* Hands-free Voice Status Banner */

@@ -174,3 +174,32 @@
 .replay-speech-btn:hover {
   background: rgba(56, 189, 248, 0.2);
 }
+
+@media (max-width: 768px) {
+  .conversation-drawer-panel {
+    max-width: 100%;
+    width: 100%;
+    border-left: none;
+    height: 100dvh;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .drawer-header {
+    padding: 14px 16px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  }
+
+  .drawer-messages-list {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .message-bubble-row {
+    max-width: 95%;
+  }
+
+  .msg-body-text {
+    font-size: 0.84rem;
+  }
+}
+

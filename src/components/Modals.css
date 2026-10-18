@@ -740,3 +740,55 @@
   margin-top: 4px;
   font-family: monospace;
 }
+
+@media (max-width: 768px) {
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-card {
+    max-width: 100%;
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+  }
+
+  .modal-card.wide-card {
+    max-width: 100%;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+  }
+
+  .modal-header h3 {
+    font-size: 1rem;
+  }
+
+  .modal-body {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .doctor-search-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .doctors-list-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-test-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-modal-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+

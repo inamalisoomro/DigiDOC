@@ -162,13 +162,6 @@
   animation: floatBubble 4s ease-in-out infinite;
 }
 
-@media (max-width: 640px) {
-  .speech-bubble-container {
-    right: -20px;
-    top: -10px;
-    max-width: 200px;
-  }
-}
 
 .speech-bubble {
   background: rgba(14, 27, 54, 0.88);
@@ -312,3 +305,96 @@
   width: 18px;
   border-radius: 99px;
 }
+
+/* Mobile Responsive Optimization: Avatar is the centerpiece highlight */
+@media (max-width: 768px) {
+  .avatar-portal-wrapper {
+    padding: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .portal-container {
+    width: clamp(200px, 54vw, 275px);
+    height: clamp(200px, 54vw, 275px);
+    max-height: 36vh;
+    max-width: 36vh;
+    margin: 0 auto;
+  }
+
+  .glow-backdrop {
+    filter: blur(16px);
+    width: 108%;
+    height: 108%;
+  }
+
+  .orbit-ring {
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+  }
+
+  /* Centered Speech Bubble directly above Doctor Avatar with downward arrow */
+  .speech-bubble-container {
+    position: absolute;
+    top: auto;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: min(320px, 90vw);
+    animation: floatBubble 4s ease-in-out infinite;
+    z-index: 10;
+  }
+
+  .speech-bubble {
+    padding: 8px 14px;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 15px rgba(59, 130, 246, 0.25);
+  }
+
+  .speech-bubble-header {
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+
+  .bubble-title {
+    font-size: 0.82rem;
+  }
+
+  .bubble-text {
+    font-size: 0.76rem;
+    line-height: 1.3;
+    -webkit-line-clamp: 2;
+  }
+
+  .speech-bubble-arrow {
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    top: auto;
+    right: auto;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-top: 8px solid rgba(14, 27, 54, 0.92);
+    border-right: 7px solid transparent;
+    border-left: 7px solid transparent;
+    border-bottom: none;
+  }
+
+  .avatar-meta-bar {
+    margin-top: 8px;
+    gap: 4px;
+  }
+
+  .expression-pill {
+    padding: 3px 12px;
+    font-size: 0.72rem;
+  }
+
+  .carousel-dots {
+    display: none;
+  }
+}
+
