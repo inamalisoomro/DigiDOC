@@ -64,7 +64,11 @@ Severe chest pain/pressure radiating to left arm/jaw, acute shortness of breath,
 
 export class GeminiService {
   constructor() {
-    this.apiKey = localStorage.getItem('digidoc_gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '';
+    this.apiKey = localStorage.getItem('digidoc_groq_api_key') || 
+                  localStorage.getItem('digidoc_gemini_api_key') || 
+                  import.meta.env.VITE_GROQ_API_KEY || 
+                  import.meta.env.VITE_GEMINI_API_KEY || 
+                  '';
     this.history = [];
     this.quettaDoctors = quettaDoctors || [];
     this.diseasesData = diseasesData || {};
@@ -72,12 +76,20 @@ export class GeminiService {
   }
 
   setApiKey(key) {
-    this.apiKey = key;
-    localStorage.setItem('digidoc_gemini_api_key', key);
+    this.apiKey = (key || '').trim();
+    if (this.apiKey.startsWith('gsk_')) {
+      localStorage.setItem('digidoc_groq_api_key', this.apiKey);
+    } else {
+      localStorage.setItem('digidoc_gemini_api_key', this.apiKey);
+    }
   }
 
   getApiKey() {
     return this.apiKey;
+  }
+
+  isGroqKey() {
+    return Boolean(this.apiKey && this.apiKey.startsWith('gsk_'));
   }
 
   resetChat() {
@@ -91,6 +103,49 @@ export class GeminiService {
     }
 
     try {
+      // 1. Groq Ultra-Fast API Integration
+      if (this.isGroqKey()) {
+        const messages = [
+          {
+            role: 'system',
+            content: `${SYSTEM_PROMPT}\n\nRELEVANT CLINICAL DATA SUMMARY:\nTotal Quetta Doctors in Directory: ${this.quettaDoctors.length}\nTotal Standard Lab Tests Available: ${this.labRangesData.tests?.length || 424}`
+          },
+          ...this.history.map(item => ({
+            role: item.role === 'model' || item.role === 'assistant' ? 'assistant' : 'user',
+            content: item.parts?.[0]?.text || item.content || ''
+          })),
+          { role: 'user', content: userMessage }
+        ];
+
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'qwen/qwen3.8-27b',
+            messages,
+            temperature: 0.35,
+            max_tokens: 700
+          })
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error?.message || `Groq API error ${res.status}`);
+        }
+
+        const data = await res.json();
+        const reply = data.choices?.[0]?.message?.content || '';
+
+        this.history.push({ role: 'user', parts: [{ text: userMessage }] });
+        this.history.push({ role: 'model', parts: [{ text: reply }] });
+
+        return this.parseReactionTags(reply);
+      }
+
+      // 2. Google Gemini API Integration
       this.history.push({ role: 'user', parts: [{ text: userMessage }] });
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`;
@@ -127,7 +182,7 @@ export class GeminiService {
 
       return this.parseReactionTags(reply);
     } catch (err) {
-      console.warn("Gemini API call failed, running on local clinical knowledge bases:", err);
+      console.warn("AI API call failed, falling back to local clinical knowledge bases:", err);
       return this.localClinicalEngine(userMessage, err.message);
     }
   }

@@ -32,10 +32,10 @@ export default function Header({ hasApiKey, language, onToggleLanguage, onOpenSe
         <button 
           className={`api-key-badge ${hasApiKey ? 'connected' : 'offline'}`}
           onClick={onOpenSettings}
-          title={hasApiKey ? 'Google AI Studio API Connected' : 'Offline / Click to connect Gemini API'}
+          title={hasApiKey ? 'AI Engine Connected (Groq / Gemini)' : 'Offline / Click to connect API'}
         >
           <Key size={14} />
-          <span>{hasApiKey ? 'AI Studio Active' : 'Setup API'}</span>
+          <span>{hasApiKey ? 'AI Connected' : 'Setup API'}</span>
         </button>
 
         {/* Online Status Pill */}

@@ -32,7 +32,7 @@ export default function SettingsModal({
         <div className="modal-header">
           <div className="modal-title-group">
             <Key className="modal-icon" size={20} />
-            <h3>Google AI Studio & Avatar Settings</h3>
+            <h3>AI Engine & Avatar Settings</h3>
           </div>
           <button className="modal-close-btn" onClick={onClose}><X size={20} /></button>
         </div>
@@ -40,15 +40,15 @@ export default function SettingsModal({
         <div className="modal-body">
           {/* API Key Form */}
           <form onSubmit={handleSave} className="api-key-section">
-            <label className="section-label">Google AI Studio API Key (Gemini API)</label>
+            <label className="section-label">AI API Key (Groq / Gemini)</label>
             <p className="section-subtitle">
-              Enter your Gemini API key from Google AI Studio. If left blank, DigiDoc will operate seamlessly on the local offline Pakistani clinical knowledge engine.
+              Enter your Groq API key (starts with <code>gsk_</code>) or Gemini key. If left blank, DigiDoc operates seamlessly on the local offline Pakistani clinical knowledge engine.
             </p>
             <div className="api-input-row">
               <input
                 type="password"
                 className="api-key-input"
-                placeholder="AIzaSy..."
+                placeholder="gsk_... or AIzaSy..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />
