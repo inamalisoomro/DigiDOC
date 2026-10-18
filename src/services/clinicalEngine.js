@@ -1,10 +1,17 @@
-import diseasesData from '../data/diseases_conditions.json';
-import quettaDoctors from '../data/quetta_doctors.json';
-import labRangesData from '../data/lab_reference_ranges.json';
+// DigiDoc Clinical Engine (Intelligent, Context-Aware Clinical Core)
+// Fully compatible with teammate's ClinicalEngine API and conversationEngine
+
+import diseasesData from '../data/diseases_conditions.json' with { type: 'json' };
+import quettaDoctors from '../data/quetta_doctors.json' with { type: 'json' };
+import labRangesData from '../data/lab_reference_ranges.json' with { type: 'json' };
+import { clinicalState } from './clinicalState.js';
+import { conversationEngine } from './conversationEngine.js';
+import { medicalRoutingPipeline } from './medicalRoutingPipeline.js';
 
 export class ClinicalEngine {
   constructor() {
-    this.symptomsList = diseasesData.symptoms || [];
+    this.clinicalState = clinicalState;
+    this.symptomsList = this.clinicalState.symptomsList || diseasesData.symptoms || [];
     this.conditionsList = diseasesData.conditions || [];
     this.specialtiesMap = diseasesData.specialties || {};
     this.doctors = quettaDoctors || [];
@@ -12,172 +19,121 @@ export class ClinicalEngine {
     this.conversationTurn = 0;
   }
 
+  /**
+   * Reset conversation turn and underlying ClinicalStateManager / ConversationEngine.
+   */
   reset() {
     this.conversationTurn = 0;
+    this.clinicalState.reset();
+    conversationEngine.reset();
   }
 
-  // Multilingual Symptom Matcher across Urdu script, Roman Urdu, and English
+  /**
+   * Retrieve current clinical state.
+   */
+  getState() {
+    return this.clinicalState.getState();
+  }
+
+  /**
+   * Multilingual Symptom Matcher across Urdu script, Roman Urdu, and English.
+   */
   detectSymptoms(text) {
-    const lower = text.toLowerCase();
-    const matched = [];
-
-    for (const sym of this.symptomsList) {
-      const enKeywords = sym.keywords?.en || [];
-      const urKeywords = sym.keywords?.ur || [];
-      const rurKeywords = sym.keywords?.rur || [];
-
-      const allKeywords = [...enKeywords, ...urKeywords, ...rurKeywords];
-      for (const kw of allKeywords) {
-        if (lower.includes(kw.toLowerCase()) || text.includes(kw)) {
-          matched.push(sym);
-          break;
-        }
-      }
-    }
-
-    return matched;
+    const { detected } = medicalRoutingPipeline.extractSymptomsWithNegation(text);
+    return detected;
   }
 
-  // Match condition from detected symptoms
+  /**
+   * Predict differential conditions using noisy-OR probability calculation.
+   */
   predictConditions(matchedSymptoms) {
     if (!matchedSymptoms || matchedSymptoms.length === 0) return [];
 
-    const symptomIds = new Set(matchedSymptoms.map(s => s.id));
-    const scored = [];
+    const symptomsMap = new Map();
+    for (const sym of matchedSymptoms) {
+      symptomsMap.set(sym.id, sym);
+    }
 
-    for (const cond of this.conditionsList) {
-      let score = 0;
-      let matchedCount = 0;
+    return medicalRoutingPipeline.evaluateDifferentials(symptomsMap);
+  }
 
-      for (const s of cond.symptoms || []) {
-        if (symptomIds.has(s.id)) {
-          score += s.weight;
-          matchedCount++;
+  /**
+   * Find Quetta Doctor by specialty.
+   */
+  findQuettaDoctor(specialtyKey) {
+    return medicalRoutingPipeline.findQuettaDoctor(specialtyKey);
+  }
+
+  /**
+   * Non-Repetitive Adaptive Follow-up Formulator.
+   */
+  formulateAdaptiveFollowUp(state = null) {
+    const currentState = state || this.clinicalState.getState();
+    const differentials = currentState.differentialConditions || [];
+    const accumulatedIds = new Set((currentState.accumulatedSymptoms || []).map(s => s.id));
+    const deniedIds = new Set(currentState.deniedSymptoms || []);
+    const knownIds = new Set([...accumulatedIds, ...deniedIds]);
+
+    if (differentials.length >= 2) {
+      const cond1 = differentials[0].condition;
+      const cond2 = differentials[1].condition;
+
+      const cond1Unique = (cond1.symptoms || [])
+        .filter(s1 => !cond2.symptoms?.some(s2 => s2.id === s1.id))
+        .map(s => this.symptomsList.find(sym => sym.id === s.id))
+        .filter(sym => sym && !knownIds.has(sym.id));
+
+      const cond2Unique = (cond2.symptoms || [])
+        .filter(s2 => !cond1.symptoms?.some(s1 => s1.id === s2.id))
+        .map(s => this.symptomsList.find(sym => sym.id === s.id))
+        .filter(sym => sym && !knownIds.has(sym.id));
+
+      if (cond1Unique.length > 0 && cond2Unique.length > 0) {
+        const s1 = cond1Unique[0];
+        const s2 = cond2Unique[0];
+        const qId = `diff_${cond1.id}_${s1.id}_vs_${cond2.id}_${s2.id}`;
+
+        if (!this.clinicalState.hasQuestionBeenAsked(qId)) {
+          this.clinicalState.markQuestionAsked(qId);
+          const s1Name = s1.name?.rur || s1.name?.en;
+          const s2Name = s2.name?.rur || s2.name?.en;
+          return {
+            text: `Tashkhees ko wazeh karne ke liye: Kya aapko **${s1Name}** mehsoos ho raha hai, ya phir **${s2Name}** jaisi alamat hai?`,
+            cleanSpeechText: `Tashkhees ke liye: Kya aapko ${s1Name} hai ya phir ${s2Name} hai?`
+          };
         }
       }
 
-      if (matchedCount > 0) {
-        scored.push({
-          condition: cond,
-          score,
-          matchedCount
-        });
+      if (cond1Unique.length > 0) {
+        const s1 = cond1Unique[0];
+        const qId = `sym_cond1_${cond1.id}_${s1.id}`;
+        if (!this.clinicalState.hasQuestionBeenAsked(qId)) {
+          this.clinicalState.markQuestionAsked(qId);
+          const s1Name = s1.name?.rur || s1.name?.en;
+          return {
+            text: `Kya is takleef ke sath aapko **${s1Name}** bhi mehsoos ho rahi hai?`,
+            cleanSpeechText: `Kya is takleef ke sath aapko ${s1Name} bhi mehsoos ho rahi hai?`
+          };
+        }
       }
     }
 
-    return scored.sort((a, b) => b.score - a.score);
+    // Default open check-in
+    return {
+      text: 'Apni takleef ke baray mein mazeed wazeh karein taakay behtar rehnumayi ki ja sakay.',
+      cleanSpeechText: 'Apni takleef ke baray mein mazeed wazeh karein.'
+    };
   }
 
-  // Find Quetta Doctor by specialty
-  findQuettaDoctor(specialtyKey) {
-    const specInfo = this.specialtiesMap[specialtyKey];
-    const specEn = specInfo?.en?.toLowerCase() || '';
-
-    // Search doctors matching specialty
-    const matched = this.doctors.find(d => {
-      const primary = d.primarySpecialty?.toLowerCase() || '';
-      return primary.includes(specEn) || (specEn && primary.includes(specEn.split(' ')[0]));
-    });
-
-    return matched || this.doctors[0];
-  }
-
-  // Generate intelligent Pakistani Clinical Response
+  /**
+   * Generate dynamic, context-aware clinical response (delegates to conversationEngine).
+   */
   generateResponse(userMessage) {
     this.conversationTurn++;
-    const text = userMessage.toLowerCase().trim();
-
-    // 1. Detect Red Flags & Critical Emergencies (Tier 1)
-    const detectedSymptoms = this.detectSymptoms(userMessage);
-    const hasRedFlag = detectedSymptoms.some(s => s.red_flag) || 
-      text.includes('chest pain') || text.includes('seene me dard') || text.includes('seene mein dard') ||
-      text.includes('سینے میں درد') || text.includes('heart attack') || text.includes('saans ruk') ||
-      text.includes('stroke') || text.includes('khoon ki ulti') || text.includes('خون کی الٹی');
-
-    if (hasRedFlag) {
-      return {
-        rawText: `[ALERT_URGENT] Khabardaar! Yeh alamaat intehayi sangeen hain (Emergency Tier 1). 
-Agar seene mein shadeed dard, baen baazu (left arm) mein takleef, ya saans lene mein shadeed dushwari hai, toh barahe karam foran Emergency Rescue 1122 par call karein ya Quetta Civil Hospital / NICVD ke Emergency Room tashreef le jayein. Kisi qisam ka intizar na karein!`,
-        cleanSpeechText: `Khabardaar! Yeh alamaat intehayi sangeen hain. Agar seene mein shadeed dard ya saans lene mein dushwari hai, toh foran Emergency Rescue 1122 par call karein ya hospital ke Emergency Room jayein.`,
-        primaryTag: 'ALERT_URGENT',
-        isUrgent: true
-      };
-    }
-
-    // 2. Lab Biomarker & Report Queries
-    if (text.includes('sugar') || text.includes('شوگر') || text.includes('fbs') || text.includes('hba1c') || text.includes('creatinine') || text.includes('cbc') || text.includes('platelets') || text.includes('پلیٹلیٹس')) {
-      return {
-        rawText: `[THINKING_ANALYZING] Main aapki lab report ka DigiDoc Reference Ranges Database se mawazna kar raha hoon.
-[SPEAKING_REASSURING] Normal Fasting Sugar 70-99 mg/dL hoti hai aur HbA1c 5.7% se kam hona chahiye. Serum Creatinine 0.6 se 1.2 mg/dL ke darmiyan gurdon ki sehat zahir karta hai.
-Aapki report mein kitni reading aayi hai aur mareez ki umar kya hai?`,
-        cleanSpeechText: `Main aapki lab report ka jaiza le raha hoon. Normal fasting sugar 70 se 99 hoti hai aur HbA1c 5.7 se kam hona chahiye. Aapki report mein kitni reading aayi hai?`,
-        primaryTag: 'THINKING_ANALYZING',
-        isUrgent: false
-      };
-    }
-
-    // 3. Condition / Symptom Match
-    if (detectedSymptoms.length > 0) {
-      const topConditions = this.predictConditions(detectedSymptoms);
-      const primarySym = detectedSymptoms[0];
-      const symName = primarySym.name.ur || primarySym.name.rur || primarySym.name.en;
-
-      if (topConditions.length > 0) {
-        const top = topConditions[0].condition;
-        const conditionName = top.name.ur || top.name.rur || top.name.en;
-        const doctor = this.findQuettaDoctor(top.specialty);
-
-        let responseText = `[NOD_EMPATHETIC] Main aapki takleef (${symName}) samajh sakta hoon.
-[SPEAKING_REASSURING] Alamaat ke mutabiq yeh mumkinah tor par **${conditionName}** ki nishandahi ho sakti hai. 
-
-- **Rehnumayi:** ${top.advice || 'Aaram karein aur hydration ka khayal rakhein.'}
-- **Mahir Doctor:** Aapko **${doctor.name}** (${doctor.primarySpecialty} - ${doctor.hospitalOrClinic || 'Quetta Hospital'}) se rabta karna chahiye. Phone: ${doctor.publicPhone || '081-2829915'}.
-
-Yeh takleef aapko kitne din se hai aur kya is ke sath bukhar ya koi aur alamat bhi hai?`;
-
-        let speechText = `Main aapki takleef samajh sakta hoon. Alamaat ke mutabiq yeh ${top.name.rur || conditionName} ho sakti hai. Yeh takleef aapko kitne din se hai aur kya is ke sath bukhar bhi hai?`;
-
-        return {
-          rawText: responseText,
-          cleanSpeechText: speechText,
-          primaryTag: 'SPEAKING_REASSURING',
-          isUrgent: top.default_tier === 1
-        };
-      }
-    }
-
-    // 4. Follow-up Duration / Severity answers (e.g. "2 din se hai", "tez dard hai", "kal se")
-    if (text.includes('din') || text.includes('hafte') || text.includes('kal') || text.includes('tez') || text.includes('halka') || text.includes('bohat') || text.includes('shadeed') || text.includes('days') || text.includes('yesterday')) {
-      const generalDoc = this.doctors.find(d => d.primarySpecialty?.toLowerCase().includes('general medicine')) || this.doctors[1];
-      return {
-        rawText: `[NOD_EMPATHETIC] Tafseel batane ka shukriya. Main samajh raha hoon.
-[SPEAKING_REASSURING] Is doraniye aur takleef ke mutabiq, kisi bhi qisam ki khud-tashkheesi (self-medication) se parhez karein aur mustanad doctor se muaina karwayein.
-Aap Quetta mein **${generalDoc.name}** (${generalDoc.hospitalOrClinic || 'Quetta Hospital'}) se rabta kar saktay hain (Rabta: ${generalDoc.publicPhone || '081-2829915'}).
-Kya aapko koi purani bimari (jaise Sugar ya Blood Pressure) hai?`,
-        cleanSpeechText: `Tafseel batane ka shukriya. Is takleef ke liye doctor se muaina zaroori hai. Kya aapko pehle se sugar ya blood pressure ki bimari hai?`,
-        primaryTag: 'SPEAKING_REASSURING',
-        isUrgent: false
-      };
-    }
-
-    // 5. Initial Greeting ONLY if first turn
-    if (this.conversationTurn === 1 && (text.includes('salam') || text.includes('hello') || text.includes('hi') || text.length < 5)) {
-      return {
-        rawText: `[WARM_SMILE] Assalam-o-Alaikum! Main DigiDoc hoon, aapka digital healthcare consultant. [LISTENING_ATTENTIVE] Main aapki sehat ke hawalay se sun raha hoon. Apni takleef, alamaat ya lab report aasaan alfaaz mein batayein.`,
-        cleanSpeechText: `Assalam-o-Alaikum! Main DigiDoc hoon. Main aapki sehat ke hawalay se sun raha hoon. Apni takleef ya alamaat batayein.`,
-        primaryTag: 'WARM_SMILE',
-        isUrgent: false
-      };
-    }
-
-    // 6. Natural clarification if not understood (NEVER repeat Assalam-o-Alaikum!)
-    return {
-      rawText: `[LISTENING_ATTENTIVE] Ji, main sun raha hoon. Baraye meharbani apni takleef ya alamaat (jaise bukhar, sar dard, pait ki kharabi, ya khansi) ke baray mein mazeed wazeh batayein taakay main sahi doctor aur ilaj ki taraf aapki rehnumayi kar sakun.`,
-      cleanSpeechText: `Ji, main sun raha hoon. Baraye meharbani apni alamaat jaise bukhar, sar dard, ya pait ki takleef wazeh batayein.`,
-      primaryTag: 'LISTENING_ATTENTIVE',
-      isUrgent: false
-    };
+    this.clinicalState.update(userMessage);
+    return conversationEngine.generateLocalResponse(userMessage);
   }
 }
 
 export const clinicalEngine = new ClinicalEngine();
+export default clinicalEngine;

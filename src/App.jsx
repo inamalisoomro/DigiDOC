@@ -12,6 +12,7 @@ import ConversationDrawer from './components/ConversationDrawer';
 
 import { geminiService } from './services/geminiService';
 import { speechService } from './services/speechService';
+import { conversationEngine } from './services/conversationEngine';
 import './App.css';
 
 function App() {
@@ -35,15 +36,36 @@ function App() {
   const [liveVolume, setLiveVolume] = useState(0);
   const [liveHearingText, setLiveHearingText] = useState('');
 
+  // Active Context Tracker for UI
+  const [clinicalSummary, setClinicalSummary] = useState({
+    chiefComplaint: null,
+    symptomsCount: 0,
+    specialty: 'General Physician',
+    tier: 3,
+    activeTopic: 'symptom_intake'
+  });
+
   // Messages History
   const [messages, setMessages] = useState([
     {
       sender: 'assistant',
-      text: "[WARM_SMILE] Assalam-o-Alaikum! Main DigiDoc hoon, Quetta aur Balochistan ka digital healthcare consultant. [LISTENING_ATTENTIVE] Main aapki sehat ke hawalay se kya madad kar sakta hoon? Aap ba-asaani bol kar ya likh kar apni takleef batayein.",
-      cleanText: "Assalam-o-Alaikum! Main DigiDoc hoon, Quetta aur Balochistan ka digital healthcare consultant. Main aapki sehat ke hawalay se kya madad kar sakta hoon? Aap ba-asaani bol kar ya likh kar apni takleef batayein.",
+      text: "[WARM_SMILE] Assalam-o-Alaikum! Main DigiDoc hoon, aapka digital healthcare consultant. [LISTENING_ATTENTIVE] Main aapki sehat ke hawalay se sun raha hoon. Apni takleef, alamaat ya lab report ba-asaani likh kar ya bol kar batayein.",
+      cleanText: "Assalam-o-Alaikum! Main DigiDoc hoon, aapka digital healthcare consultant. Main aapki sehat ke hawalay se sun raha hoon. Apni takleef, alamaat ya lab report ba-asaani likh kar ya bol kar batayein.",
       tag: "WARM_SMILE"
     }
   ]);
+
+  // Sync clinical summary state
+  const refreshClinicalSummary = useCallback(() => {
+    const st = conversationEngine.getState();
+    setClinicalSummary({
+      chiefComplaint: st.chiefComplaint,
+      symptomsCount: st.symptoms.size,
+      specialty: st.routing.specialtyEn,
+      tier: st.safetyStatus.tier,
+      activeTopic: st.activeTopic
+    });
+  }, []);
 
   // Sync speech service listeners
   useEffect(() => {
@@ -64,7 +86,6 @@ function App() {
       if (speaking) {
         setAvatarState('speaking');
       } else {
-        // When speech ends, return to listening if hands-free is active, else alert or idle
         if (speechService.isContinuous) {
           setAvatarState('listening');
           setCurrentTag('LISTENING_ATTENTIVE');
@@ -89,6 +110,7 @@ function App() {
     const nextLang = language === 'ur-PK' ? 'en-US' : 'ur-PK';
     setLanguage(nextLang);
     speechService.setLanguage(nextLang);
+    conversationEngine.getState().language = nextLang === 'ur-PK' ? 'rur' : 'en';
   };
 
   // Vocalize and drive avatar with continuous listening after completion
@@ -130,12 +152,16 @@ function App() {
     setIsLoading(true);
     setAvatarState('thinking');
     setCurrentTag('THINKING_ANALYZING');
-    setSpeechBubbleText("Analyzing your concern...");
+    setSpeechBubbleText("Analyzing your symptoms & context...");
 
     try {
       const response = await geminiService.sendMessage(userText);
 
       setIsLoading(false);
+
+      if (response.isAborted) {
+        return;
+      }
 
       if (response.isUrgent) {
         setIsEmergency(true);
@@ -155,6 +181,8 @@ function App() {
         }
       ]);
 
+      refreshClinicalSummary();
+
       // Vocalize and animate avatar
       triggerAvatarSpeech(response.cleanSpeechText, response.primaryTag);
 
@@ -164,13 +192,14 @@ function App() {
       setAvatarState('idle');
       setSpeechBubbleText("Maaf kijiye ga, dobara koshish karein.");
     }
-  }, [triggerAvatarSpeech]);
+  }, [triggerAvatarSpeech, refreshClinicalSummary]);
 
-  // Toggle Continuous Hands-Free Voice Mode
+  // Toggle Continuous Hands-Free Voice Mode with Barge-In Interruption Handling
   const handleToggleContinuousVoice = () => {
     if (isContinuousVoice) {
       // Turn OFF voice mode
       speechService.stopContinuousMode();
+      geminiService.abortCurrentRequest();
       setIsContinuousVoice(false);
       setIsListening(false);
       setAvatarState('idle');
@@ -197,6 +226,8 @@ function App() {
         // On User Interruption / Barge-In while AI is speaking!
         () => {
           setLiveHearingText('');
+          geminiService.abortCurrentRequest();
+          speechService.stopSpeaking();
           setAvatarState('listening');
           setCurrentTag('LISTENING_ATTENTIVE');
           setSpeechBubbleText("Listening to you... (Ji boliye)");
@@ -208,6 +239,24 @@ function App() {
   // Quick action clicked
   const handleQuickAction = (prompt) => {
     handleSendMessage(prompt);
+  };
+
+  // Reset conversation to fresh intake
+  const handleResetSession = () => {
+    conversationEngine.reset();
+    geminiService.resetChat();
+    refreshClinicalSummary();
+    setIsEmergency(false);
+    setMessages([
+      {
+        sender: 'assistant',
+        text: "[WARM_SMILE] Assalam-o-Alaikum! Naya consultation shuru ho chuka hai. Main DigiDoc hoon. Apni takleef ya alamaat batayein.",
+        cleanText: "Assalam-o-Alaikum! Naya consultation shuru ho chuka hai. Main DigiDoc hoon. Apni takleef ya alamaat batayein.",
+        tag: "WARM_SMILE"
+      }
+    ]);
+    setSpeechBubbleText("New consultation started. How can I help you?");
+    setAvatarState('idle');
   };
 
   // Test direct tag
@@ -240,11 +289,29 @@ function App() {
           <EmergencyBanner onDismiss={() => setIsEmergency(false)} />
         )}
 
+        {/* Context Awareness Status Strip (Showing DigiDoc is actively retaining clinical context) */}
+        {clinicalSummary.chiefComplaint && (
+          <div className="clinical-context-strip">
+            <span className="context-chip chief-complaint">
+              <strong>Concern:</strong> {clinicalSummary.chiefComplaint}
+            </span>
+            <span className="context-chip symptoms-count">
+              <strong>Symptoms Noted:</strong> {clinicalSummary.symptomsCount}
+            </span>
+            <span className="context-chip specialty-target">
+              <strong>Target Specialty:</strong> {clinicalSummary.specialty}
+            </span>
+            <button className="new-session-chip" onClick={handleResetSession} title="Start Fresh Consultation">
+              + New Session
+            </button>
+          </div>
+        )}
+
         {/* Hands-free Voice Notification Pill */}
         {isContinuousVoice && (
           <div className="hands-free-status-banner">
             <span className="live-mic-dot"></span>
-            <span>Hands-Free Continuous Voice Active — Speak naturally at any time or interrupt DigiDoc</span>
+            <span>Hands-Free Continuous Voice Active — Speak naturally or interrupt DigiDoc at any moment</span>
             <button className="stop-voice-btn" onClick={handleToggleContinuousVoice}>Stop Voice</button>
           </div>
         )}
@@ -272,7 +339,7 @@ function App() {
           </div>
         )}
 
-        {/* Bottom Chat Bar with Continuous Mic & Addons */}
+        {/* Bottom Chat Bar with Continuous Mic, File Upload & Addons */}
         <ChatInputBar 
           onSendMessage={handleSendMessage}
           onStartMic={handleToggleContinuousVoice}
@@ -280,6 +347,10 @@ function App() {
           isListening={isContinuousVoice || isListening}
           isLoading={isLoading}
           onOpenQuickMenu={() => setShowLabs(true)}
+          onUploadReport={(file) => {
+            const query = `Maine report upload ki hai: ${file.name}. DigiDoc is report ka jaiza lein.`;
+            handleSendMessage(query);
+          }}
         />
       </div>
 
@@ -297,7 +368,7 @@ function App() {
         <DoctorsModal 
           onClose={() => setShowDoctors(false)}
           onSelectDoctor={(doc) => {
-            handleSendMessage(`Main Dr. ${doc.name} (${doc.primarySpecialty} - ${doc.hospitalOrClinic}) se rabta ya consultation ke hawalay se pochna chahta hoon.`);
+            handleSendMessage(`Main Dr. ${doc.name} (${doc.primarySpecialty} - ${doc.hospitalOrClinic}) se consultation ke hawalay se pochna chahta hoon.`);
             setShowDoctors(false);
           }}
         />

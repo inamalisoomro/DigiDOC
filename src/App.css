@@ -150,3 +150,50 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Clinical Context Strip */
+.clinical-context-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 16px;
+  margin: 4px auto;
+  max-width: 800px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 9999px;
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.context-chip {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  background: rgba(30, 41, 59, 0.6);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.context-chip strong {
+  color: #38bdf8;
+  margin-right: 4px;
+}
+
+.new-session-chip {
+  font-size: 0.72rem;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.new-session-chip:hover {
+  background: rgba(59, 130, 246, 0.4);
+  color: #ffffff;
+}

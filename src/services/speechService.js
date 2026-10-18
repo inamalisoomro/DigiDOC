@@ -1,3 +1,5 @@
+// DigiDoc Natural Conversational Speech & Interruption (Barge-In) Service
+
 export class SpeechService {
   constructor() {
     this.recognition = null;
@@ -83,6 +85,12 @@ export class SpeechService {
       if (this.onVolumeChange) {
         this.onVolumeChange(rms);
       }
+
+      // Voice Activity Detection during speaking (Barge-In / Interruption detection)
+      if (this.isSpeaking && rms > 0.12) {
+        // High confidence user voice detected while AI is speaking -> Trigger interruption!
+        this.handleInterruption();
+      }
     }, 60);
   }
 
@@ -103,9 +111,6 @@ export class SpeechService {
       };
 
       this.recognition.onresult = (event) => {
-        // If AI is already speaking or processing, discard any incoming mic audio immediately!
-        if (this.isSpeaking || this.isProcessing) return;
-
         let interim = '';
         let final = '';
 
@@ -120,6 +125,11 @@ export class SpeechService {
 
         const candidate = (final || interim).trim();
         if (!candidate || candidate.length < 2) return;
+
+        // If user spoke while assistant was speaking -> Barge-In triggered!
+        if (this.isSpeaking) {
+          this.handleInterruption();
+        }
 
         this.latestTranscript = candidate;
 
@@ -137,7 +147,7 @@ export class SpeechService {
         // Fast silence cutoff (650ms after user pauses speaking)
         clearTimeout(this.silenceTimer);
         this.silenceTimer = setTimeout(() => {
-          if (this.latestTranscript && this.latestTranscript.length >= 2 && !this.isSpeaking && !this.isProcessing) {
+          if (this.latestTranscript && this.latestTranscript.length >= 2 && !this.isSpeaking) {
             this.commitTranscript(this.latestTranscript);
           }
         }, 650);
@@ -161,17 +171,28 @@ export class SpeechService {
     }
   }
 
+  // Handle User Interruption (Barge-In)
+  handleInterruption() {
+    if (this.isSpeaking || this.isProcessing) {
+      console.log("Voice interruption (Barge-In) detected: stopping assistant speech.");
+      this.stopSpeaking();
+      this.isProcessing = false;
+      if (this.onInterrupted) {
+        this.onInterrupted();
+      }
+    }
+  }
+
   commitTranscript(text) {
     clearTimeout(this.silenceTimer);
     const cleanText = text.trim();
     this.latestTranscript = '';
 
     if (cleanText && cleanText.length >= 2) {
-      // Mark as processing so onend will NOT restart recognition while AI prepares answer!
       this.isProcessing = true;
 
       try {
-        this.recognition.stop();
+        this.recognition?.stop();
       } catch (e) {}
 
       if (this.onTranscript) {
@@ -253,16 +274,9 @@ export class SpeechService {
     // Cancel any previous speech
     this.synthesis.cancel();
 
-    // Ensure mic recognition is completely stopped
-    if (this.recognition) {
-      try {
-        this.recognition.stop();
-      } catch (e) {}
-    }
-
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.98;
-    utterance.pitch = 1.03;
+    utterance.rate = 1.0;
+    utterance.pitch = 1.02;
 
     const voices = this.synthesis.getVoices();
     const urduVoice = voices.find(v => v.lang.includes('ur') || v.lang.includes('hi') || v.name.includes('Urdu') || v.name.includes('Hindi'));
@@ -311,13 +325,13 @@ export class SpeechService {
   stopSpeaking() {
     if (this.synthesis) {
       this.synthesis.cancel();
-      this.isSpeaking = false;
-      this.isProcessing = false;
-      if (this.onSpeakingChange) this.onSpeakingChange(false);
+    }
+    this.isSpeaking = false;
+    this.isProcessing = false;
+    if (this.onSpeakingChange) this.onSpeakingChange(false);
 
-      if (this.isContinuous) {
-        this.restartRecognitionWithDelay(250);
-      }
+    if (this.isContinuous) {
+      this.restartRecognitionWithDelay(250);
     }
   }
 }

@@ -1,29 +1,34 @@
 import diseasesData from '../data/diseases_conditions.json';
 import quettaDoctors from '../data/quetta_doctors.json';
 import labRangesData from '../data/lab_reference_ranges.json';
-import { clinicalEngine } from './clinicalEngine';
+import { conversationEngine } from './conversationEngine.js';
+import { safetyLayer } from './safetyLayer.js';
 
-const SYSTEM_PROMPT = `SYSTEM INSTRUCTIONS: DigiDoc AI Adaptive Clinical Physician & Triage Consultant
+const MASTER_SYSTEM_PROMPT = `SYSTEM INSTRUCTIONS: DigiDoc AI Adaptive Clinical Physician & Triage Consultant
 
 1. IDENTITY & PERSONA
 You are DigiDoc, an experienced, deeply empathetic, and clinically sharp digital physician and patient triage consultant in Pakistan (with specialized grounding in Balochistan/Quetta healthcare infrastructure and national emergency protocols).
 - Avatar Presence: You embody an interactive video physician. You express real-time clinical empathy, thoughtful analysis, and reassuring bedside manner.
 - Language & Tone: You communicate fluently in polite Urdu (اردو), natural Roman Urdu, or English matching patient input. Always use respectful address ("Aap", "Ji", "Fikr na karein").
-- Bedside Manner: Empathetic, calm, decisive, and never robotic.
+- Bedside Manner: Empathetic, calm, decisive, concise, and never robotic.
 
-2. ANTI-SCRIPTING & DYNAMIC CLINICAL REASONING RULES (CRITICAL)
-- NEVER READ A PRE-DETERMINED SCRIPT OR QUESTIONNAIRE.
-- CONTEXT CONTINUITY: Always remember and build upon everything the patient previously shared. Never ask for information the patient already provided.
-- DETERIORATION AWARENESS: If the patient reports their condition is worsening, escalating, or that they are "ailing more" (e.g., "bukhar barh raha hai", "pain is worse", "feeling weaker", "chills/shivering", "alimaat barh rahi hain"):
-  * IMMEDIATELY acknowledge the escalation with clinical empathy ([NOD_EMPATHETIC] or [ALERT_URGENT]).
-  * ESCALATE the urgency tier immediately.
-  * Stop asking casual background questions. Shift focus to ruling out acute emergencies and providing decisive clinical triage.
+2. ANTI-SCRIPTING & CONTEXT-AWARE CONVERSATIONAL RULES (MANDATORY)
+- NEVER READ A PRE-DETERMINED SCRIPT OR RIGID QUESTIONNAIRE.
+- CONTEXT CONTINUITY: Always remember and build upon everything the patient previously shared. NEVER ask for information the patient already provided (e.g. location, duration, severity, onset, or denied symptoms).
+- ACKNOWLEDGE CONCERNS: Acknowledge the patient's concern naturally before moving forward.
 - DISCRIMINATIVE INQUIRY (ONE QUESTION ONLY):
-  * When more diagnostic information is needed, ask at most ONE high-yield, targeted question per response that differentiates candidate conditions (e.g. "Along with this worsening fever, is there any neck stiffness, skin rash, or severe shivering?").
+  * When more clinical information is needed, ask at most ONE high-yield, targeted question per response that differentiates candidate conditions (e.g. "Along with this headache, is there any nausea, neck stiffness, or sensitivity to light?").
   * Do NOT barrage the patient with multi-part questions or repeated baseline questions.
+- CORRECTIONS HANDLING:
+  * If the patient corrects a previous detail (e.g. "Actually on the right side, not left"), immediately acknowledge the correction and base all clinical reasoning on the corrected information.
+- DETERIORATION AWARENESS:
+  * If the patient reports their condition is worsening or escalating ("bukhar barh raha hai", "pain is worse", "feeling weaker", "chills"):
+  * Immediately acknowledge escalation ([NOD_EMPATHETIC] or [ALERT_URGENT]).
+  * Prioritize ruling out acute red flags and escalate triage urgency.
+- MEDICAL UNCERTAINTY & HONESTY:
+  * Distinguish possibilities from confirmed diagnoses. Do not claim to diagnose definitively from a conversation. Explain clinical reasoning clearly.
 - ACTIONABLE MEDICAL GUIDANCE:
-  * When the picture is clear or worsening, provide concrete, safe supportive care (hydration/ORS, fever management precautions, rest) and recommend the appropriate Quetta/Pakistani specialist.
-  * Clearly inform the patient what danger signs must trigger an immediate visit to the nearest Emergency Room (Civil Hospital Quetta / BMC / NICVD).
+  * When sufficient information is available, provide concrete, safe supportive care (hydration/ORS, rest) and recommend the appropriate Pakistani/Quetta medical specialist.
 
 3. AVATAR MICRO-REACTIONS (Interweave at beginning of key thoughts):
 - [LISTENING_ATTENTIVE] — Listening carefully or acknowledging user input.
@@ -49,28 +54,21 @@ Tier Definitions:
 
 export class GeminiService {
   constructor() {
-    this.apiKey = localStorage.getItem('digidoc_gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '';
+    this.apiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('digidoc_gemini_api_key') : '') || 
+      (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : '') || 
+      'AIzaSyA4UnBLjgVV0frIgBZ0fhWsHF_zW2HjBSM';
     this.history = [];
     this.quettaDoctors = quettaDoctors || [];
     this.diseasesData = diseasesData || {};
     this.labRangesData = labRangesData || {};
-
-    // Cumulative multi-turn clinical context tracker
-    this.clinicalContext = {
-      chiefComplaint: null,
-      accumulatedSymptoms: [],
-      timeline: null,
-      trajectory: 'stable', // 'stable' | 'escalating' | 'improving'
-      currentTier: 3,
-      redFlags: [],
-      suggestedSpecialist: null,
-      turnCount: 0
-    };
+    this.currentAbortController = null;
   }
 
   setApiKey(key) {
     this.apiKey = key;
-    localStorage.setItem('digidoc_gemini_api_key', key);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('digidoc_gemini_api_key', key);
+    }
   }
 
   getApiKey() {
@@ -79,95 +77,57 @@ export class GeminiService {
 
   resetChat() {
     this.history = [];
-    this.clinicalContext = {
-      chiefComplaint: null,
-      accumulatedSymptoms: [],
-      timeline: null,
-      trajectory: 'stable',
-      currentTier: 3,
-      redFlags: [],
-      suggestedSpecialist: null,
-      turnCount: 0
-    };
-  }
-
-  // Update clinical context dynamically from user input
-  updateClinicalContext(userMessage) {
-    this.clinicalContext.turnCount++;
-    const text = userMessage.toLowerCase();
-
-    // 1. Detect symptoms via Clinical Engine
-    try {
-      const detected = clinicalEngine.detectSymptoms(userMessage) || [];
-      for (const sym of detected) {
-        if (!this.clinicalContext.accumulatedSymptoms.some(s => s.id === sym.id)) {
-          this.clinicalContext.accumulatedSymptoms.push(sym);
-        }
-      }
-      if (!this.clinicalContext.chiefComplaint && this.clinicalContext.accumulatedSymptoms.length > 0) {
-        const first = this.clinicalContext.accumulatedSymptoms[0];
-        this.clinicalContext.chiefComplaint = first.name?.rur || first.name?.en || first.id;
-      }
-    } catch (e) {
-      console.debug("Context symptom tracking:", e);
-    }
-
-    // 2. Deterioration and Escalation Detection
-    const worseningRegex = /(ailing more|getting worse|worse|worsened|barh gaya|barh rahi|zyada|ziada|shadeed|chills|shivering|severe|deteriorat|tez bukhar|dard barh|takleef barh)/i;
-    if (worseningRegex.test(text)) {
-      this.clinicalContext.trajectory = 'escalating';
-      if (this.clinicalContext.currentTier > 2) {
-        this.clinicalContext.currentTier = 2; // Escalate to at least Urgent (Tier 2)
-      }
-    }
-
-    // 3. Timeline extraction
-    const timelineMatch = text.match(/(\d+\s*(din|days?|hafte|weeks?|hours?|ghante)|kal se|yesterday|aaj se|today|parso)/i);
-    if (timelineMatch) {
-      this.clinicalContext.timeline = timelineMatch[0];
-    }
-
-    // 4. Red-flag emergency detection
-    const redFlagRegex = /(chest pain|seene me.? dard|seene mein dard|heart attack|saans ruk|shortness of breath|stroke|paralysis|blood in vomit|khoon ki ulti|unconscious|behosh)/i;
-    if (redFlagRegex.test(text)) {
-      this.clinicalContext.currentTier = 1;
-      if (!this.clinicalContext.redFlags.includes('Acute Emergency')) {
-        this.clinicalContext.redFlags.push('Acute Emergency');
-      }
+    conversationEngine.reset();
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
     }
   }
 
-  async sendMessage(userMessage) {
-    // Dynamically update clinical context on every user message
-    this.updateClinicalContext(userMessage);
+  // Abort any ongoing stream or generation (used during voice barge-in / interruption)
+  abortCurrentRequest() {
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+    }
+  }
 
-    // If no API key provided, fall back to our clinical engine
+  async sendMessage(userMessage, onChunk = null) {
+    // 1. Process through the conversational state engine and safety layer
+    const pipelineResult = conversationEngine.processUserUtterance(userMessage);
+
+    // If safety layer triggers an immediate Tier 1 emergency, bypass LLM to eliminate hallucination or latency
+    if (pipelineResult.isEmergency) {
+      return pipelineResult.response;
+    }
+
+    const clinicalState = conversationEngine.getState();
+
+    // If no API key provided, fall back to our context-aware clinical engine
     if (!this.apiKey) {
-      return this.localClinicalEngine(userMessage);
+      return conversationEngine.generateLocalResponse(userMessage);
     }
+
+    // Abort previous in-flight request if any
+    this.abortCurrentRequest();
+    this.currentAbortController = new AbortController();
+    const signal = this.currentAbortController.signal;
 
     try {
       this.history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`;
-      
-      const clinicalContextSummary = `
-CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
-- Consultation Turn: #${this.clinicalContext.turnCount}
-- Chief Complaint: ${this.clinicalContext.chiefComplaint || 'Under active intake'}
-- Accumulated Symptoms: ${this.clinicalContext.accumulatedSymptoms.map(s => s.name?.rur || s.name?.en || s.id).join(', ') || 'None identified yet'}
-- Timeline / Duration: ${this.clinicalContext.timeline || 'Not stated'}
-- Clinical Trajectory: ${this.clinicalContext.trajectory.toUpperCase()} ${this.clinicalContext.trajectory === 'escalating' ? '⚠️ [CRITICAL: Patient reports condition is worsening / ailing more. Immediately acknowledge escalation, prioritize red flags & escalate triage!]' : ''}
-- Active Urgency Tier: Tier ${this.clinicalContext.currentTier}
-- Known Red Flags: ${this.clinicalContext.redFlags.length ? this.clinicalContext.redFlags.join(', ') : 'None detected so far'}
-- Total Quetta Doctors in Local Directory: ${this.quettaDoctors.length}
-`;
+      // Build structured context string from ClinicalState
+      const contextSummary = clinicalState.toClinicalSummaryString();
 
+      // Check if streaming is requested
+      if (onChunk && typeof onChunk === 'function') {
+        return await this.streamMessage(userMessage, contextSummary, onChunk, signal);
+      }
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`;
       const payload = {
         systemInstruction: {
-          parts: [{ 
-            text: `${SYSTEM_PROMPT}\n\n${clinicalContextSummary}` 
-          }]
+          parts: [{ text: `${MASTER_SYSTEM_PROMPT}\n\n${contextSummary}` }]
         },
         contents: this.history,
         generationConfig: {
@@ -180,7 +140,8 @@ CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal
       });
 
       if (!res.ok) {
@@ -195,9 +156,77 @@ CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
 
       return this.parseReactionTags(reply);
     } catch (err) {
-      console.warn("Gemini API call failed, running on local clinical knowledge bases:", err);
-      return this.localClinicalEngine(userMessage, err.message);
+      if (err.name === 'AbortError') {
+        console.log("Gemini request was cancelled by user interruption.");
+        return {
+          rawText: '',
+          cleanSpeechText: '',
+          primaryTag: 'LISTENING_ATTENTIVE',
+          isAborted: true
+        };
+      }
+      console.warn("Gemini API call failed, falling back to local clinical knowledge engine:", err);
+      return conversationEngine.generateLocalResponse(userMessage);
+    } finally {
+      this.currentAbortController = null;
     }
+  }
+
+  // Low-latency SSE streaming generation
+  async streamMessage(userMessage, contextSummary, onChunk, signal) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${this.apiKey}`;
+    const payload = {
+      systemInstruction: {
+        parts: [{ text: `${MASTER_SYSTEM_PROMPT}\n\n${contextSummary}` }]
+      },
+      contents: this.history,
+      generationConfig: {
+        temperature: 0.35,
+        topP: 0.95,
+        maxOutputTokens: 850
+      }
+    };
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal
+    });
+
+    if (!res.ok) {
+      throw new Error(`Streaming API error ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let accumulatedText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunkStr = decoder.decode(value, { stream: true });
+      const lines = chunkStr.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.replace('data: ', '').trim();
+          if (jsonStr === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const textPart = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (textPart) {
+              accumulatedText += textPart;
+              onChunk(textPart, accumulatedText);
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    this.history.push({ role: 'model', parts: [{ text: accumulatedText }] });
+    return this.parseReactionTags(accumulatedText);
   }
 
   parseReactionTags(text) {
@@ -215,6 +244,8 @@ CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
       };
     }
 
+    const clinicalState = conversationEngine.getState();
+
     // 1. Extract Avatar Reaction Tags
     const reactionRegex = /\[(LISTENING_ATTENTIVE|NOD_EMPATHETIC|THINKING_ANALYZING|SPEAKING_REASSURING|ALERT_URGENT|WARM_SMILE)\]/g;
     const tagsFound = [];
@@ -226,13 +257,13 @@ CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
 
     // 2. Extract Structured Clinical Action Tags
     const tierMatch = text.match(/\[TIER:\s*([1-4])\]/i);
-    const tier = tierMatch ? parseInt(tierMatch[1], 10) : (tagsFound.includes('ALERT_URGENT') ? 1 : this.clinicalContext.currentTier || 3);
+    const tier = tierMatch ? parseInt(tierMatch[1], 10) : (tagsFound.includes('ALERT_URGENT') ? 1 : clinicalState.safetyStatus.tier || 3);
 
     const actionMatch = text.match(/\[ACTION:\s*([A-Z_]+)\]/i);
     const action = actionMatch ? actionMatch[1].toUpperCase() : (tier === 1 ? 'ESCALATE_EMERGENCY' : 'RECOMMEND_DOCTOR');
 
     const specialistMatch = text.match(/\[SPECIALIST:\s*([^\]\n]+)\]/i);
-    const specialist = specialistMatch ? specialistMatch[1].trim() : 'General Physician';
+    const specialist = specialistMatch ? specialistMatch[1].trim() : clinicalState.routing.specialtyEn || 'General Physician';
 
     const labsMatch = text.match(/\[SUGGESTED_LABS:\s*([^\]\n]+)\]/i);
     let suggestedLabs = [];
@@ -248,12 +279,7 @@ CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
       primaryTag = 'ALERT_URGENT';
     }
 
-    // Update clinical context specialist
-    if (specialist && specialist !== 'General Physician') {
-      this.clinicalContext.suggestedSpecialist = specialist;
-    }
-
-    // 3. Clean text for natural speech synthesis (strip all reaction tags, action tags, & markdown)
+    // 3. Clean text for natural speech synthesis
     const cleanSpeechText = text
       .replace(/\[(LISTENING_ATTENTIVE|NOD_EMPATHETIC|THINKING_ANALYZING|SPEAKING_REASSURING|ALERT_URGENT|WARM_SMILE)\]/g, '')
       .replace(/\[(TIER|ACTION|SPECIALIST|SUGGESTED_LABS):[^\]]+\]/gi, '')
@@ -273,25 +299,8 @@ CURRENT PATIENT CLINICAL STATE (REAL-TIME CONTEXT):
       action,
       specialist,
       suggestedLabs,
-      clinicalContext: { ...this.clinicalContext }
+      clinicalState: clinicalState.exportSession()
     };
-  }
-
-  localClinicalEngine(userMessage, apiNotice) {
-    const localRes = clinicalEngine.generateResponse(userMessage);
-    let rawWithTags = localRes.rawText;
-
-    // Ensure local response also provides machine-readable action tags
-    if (!rawWithTags.includes('[TIER:')) {
-      const assignedTier = localRes.isUrgent ? 1 : this.clinicalContext.currentTier;
-      const assignedAction = assignedTier === 1 ? 'ESCALATE_EMERGENCY' : 'RECOMMEND_DOCTOR';
-      const assignedSpecialist = this.clinicalContext.suggestedSpecialist || 'General Physician';
-      const assignedLabs = userMessage.toLowerCase().includes('sugar') || userMessage.toLowerCase().includes('lab') ? 'FBS, HbA1c, CBC' : 'None';
-
-      rawWithTags += `\n\n[TIER: ${assignedTier}]\n[ACTION: ${assignedAction}]\n[SPECIALIST: ${assignedSpecialist}]\n[SUGGESTED_LABS: ${assignedLabs}]`;
-    }
-
-    return this.parseReactionTags(rawWithTags);
   }
 }
 
