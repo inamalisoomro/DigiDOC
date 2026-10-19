@@ -103,10 +103,17 @@ export class SpeechService {
       };
 
       this.recognition.onresult = (event) => {
-        // If AI is currently speaking, the user is interrupting — stop speech and listen!
+        // If AI is currently speaking, the user is interrupting — stop speech immediately!
         if (this.isSpeaking) {
-          this.stopSpeaking();
+          // Only cancel synthesis directly — do NOT call stopSpeaking() here because it
+          // resets isProcessing and triggers restartRecognitionWithDelay, which conflicts
+          // with commitTranscript() that runs right after this block.
+          if (this.synthesis) this.synthesis.cancel();
+          this.isSpeaking = false;
+          if (this.onSpeakingChange) this.onSpeakingChange(false);
           if (this.onInterrupted) this.onInterrupted();
+          // Clear any pending restart that stopSpeaking normally schedules
+          this.isRestarting = false;
         }
 
         // If still processing (but not speaking), discard — avoid double-submit
@@ -361,6 +368,8 @@ export class SpeechService {
     };
 
     utterance.onend = () => {
+      // If isSpeaking was already cleared by a barge-in, skip — the new query handles restart
+      if (!this.isSpeaking) return;
       this.isSpeaking = false;
       this.isProcessing = false;
       if (this.onSpeakingChange) this.onSpeakingChange(false);
@@ -373,6 +382,8 @@ export class SpeechService {
     };
 
     utterance.onerror = (e) => {
+      // 'interrupted' means synthesis.cancel() was called intentionally (barge-in) — skip side effects
+      if (e.error === 'interrupted') return;
       console.warn("Speech synthesis notice:", e);
       this.isSpeaking = false;
       this.isProcessing = false;
