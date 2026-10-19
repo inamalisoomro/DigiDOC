@@ -103,16 +103,8 @@ export class SpeechService {
       };
 
       this.recognition.onresult = (event) => {
-        // BARGE-IN: If AI is speaking and user starts talking, stop AI immediately
-        if (this.isSpeaking) {
-          this.synthesis.cancel(); // stops speech; utterance.onerror fires but cleans state fine
-          this.isSpeaking = false;
-          if (this.onSpeakingChange) this.onSpeakingChange(false);
-          if (this.onInterrupted) this.onInterrupted();
-        }
-
-        // If AI is processing (waiting for response), discard — avoid double-submit
-        if (this.isProcessing) return;
+        // If AI is already speaking or processing, discard any incoming mic audio immediately!
+        if (this.isSpeaking || this.isProcessing) return;
 
         let interim = '';
         let final = '';
@@ -375,9 +367,6 @@ export class SpeechService {
     };
 
     utterance.onerror = (e) => {
-      // 'interrupted' = synthesis.cancel() was called intentionally (barge-in)
-      // Skip — the new user query handles its own state from here
-      if (e.error === 'interrupted') return;
       console.warn("Speech synthesis notice:", e);
       this.isSpeaking = false;
       this.isProcessing = false;
