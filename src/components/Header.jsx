@@ -1,5 +1,6 @@
 import React from 'react';
-import { Activity, Globe, Key } from 'lucide-react';
+import { Globe, Key } from 'lucide-react';
+import digidocLogo from '../assets/digidoc-logo.jpg';
 import './Header.css';
 
 export default function Header({ hasApiKey, language, onToggleLanguage, onOpenSettings }) {
@@ -8,7 +9,7 @@ export default function Header({ hasApiKey, language, onToggleLanguage, onOpenSe
       {/* Brand logo & tagline */}
       <div className="brand-box">
         <div className="logo-badge">
-          <Activity size={24} className="heart-icon" />
+          <img src={digidocLogo} alt="DigiDoc Logo" className="brand-logo-img" />
         </div>
         <div className="brand-text">
           <h1 className="brand-title">Digi<span>Doc</span></h1>
