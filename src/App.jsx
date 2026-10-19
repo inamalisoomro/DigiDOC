@@ -32,6 +32,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isEmergency, setIsEmergency] = useState(false);
   const [language, setLanguage] = useState('ur-PK');
+  const [apiKey, setApiKey] = useState(geminiService.getApiKey());
   const [liveVolume, setLiveVolume] = useState(0);
   const [liveHearingText, setLiveHearingText] = useState('');
 
@@ -163,6 +164,11 @@ function App() {
       setIsLoading(false);
       setAvatarState('idle');
       setSpeechBubbleText("Maaf kijiye ga, dobara koshish karein.");
+      speechService.isProcessing = false;
+      speechService.isSpeaking = false;
+      if (speechService.isContinuous) {
+        speechService.restartRecognitionWithDelay(400);
+      }
     }
   }, [triggerAvatarSpeech]);
 
@@ -229,7 +235,7 @@ function App() {
       <div className="main-viewport">
         {/* Header */}
         <Header 
-          hasApiKey={Boolean(geminiService.getApiKey())}
+          hasApiKey={Boolean(apiKey)}
           language={language}
           onToggleLanguage={handleToggleLanguage}
           onOpenSettings={() => setShowSettings(true)}
@@ -286,8 +292,11 @@ function App() {
       {/* Modals & Drawers */}
       {showSettings && (
         <SettingsModal 
-          currentApiKey={geminiService.getApiKey()}
-          onSaveApiKey={(key) => geminiService.setApiKey(key)}
+          currentApiKey={apiKey}
+          onSaveApiKey={(key) => {
+            geminiService.setApiKey(key);
+            setApiKey(geminiService.getApiKey());
+          }}
           onClose={() => setShowSettings(false)}
           onTestTag={handleTestTag}
         />

@@ -147,6 +147,10 @@ export class SpeechService {
         if (event.error !== 'no-speech' && event.error !== 'aborted') {
           console.warn('Speech recognition notice:', event.error);
         }
+        if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+          this.isListening = false;
+          if (this.onListeningChange) this.onListeningChange(false);
+        }
       };
 
       this.recognition.onend = () => {
@@ -155,9 +159,32 @@ export class SpeechService {
 
         // Resume listening ONLY if continuous is on AND AI is NOT speaking and NOT processing
         if (this.isContinuous && !this.isSpeaking && !this.isProcessing && !this.isRestarting) {
-          this.restartRecognitionWithDelay(250);
+          this.restartRecognitionWithDelay(300);
         }
       };
+    }
+  }
+
+  startRecognition() {
+    if (!this.recognition) {
+      this.initRecognition();
+    }
+    if (!this.recognition || this.isSpeaking || this.isProcessing) return;
+
+    try {
+      this.recognition.lang = this.language;
+      this.recognition.start();
+    } catch (e) {
+      // If recognition was in an invalid state, re-create fresh instance
+      this.initRecognition();
+      try {
+        if (this.recognition) {
+          this.recognition.lang = this.language;
+          this.recognition.start();
+        }
+      } catch (err) {
+        console.warn("Speech recognition restart notice:", err);
+      }
     }
   }
 
@@ -170,6 +197,18 @@ export class SpeechService {
       // Mark as processing so onend will NOT restart recognition while AI prepares answer!
       this.isProcessing = true;
 
+      // Auto-unlock watchdog: If AI doesn't reply within 12 seconds, reset isProcessing
+      clearTimeout(this.processingWatchdog);
+      this.processingWatchdog = setTimeout(() => {
+        if (this.isProcessing && !this.isSpeaking) {
+          console.warn("Speech processing watchdog triggered: resetting state");
+          this.isProcessing = false;
+          if (this.isContinuous) {
+            this.restartRecognitionWithDelay(250);
+          }
+        }
+      }, 12000);
+
       try {
         this.recognition.stop();
       } catch (e) {}
@@ -181,15 +220,13 @@ export class SpeechService {
   }
 
   restartRecognitionWithDelay(delayMs = 250) {
-    if (!this.isContinuous || this.isSpeaking || this.isProcessing || this.isListening) return;
+    if (!this.isContinuous || this.isSpeaking || this.isProcessing) return;
 
     this.isRestarting = true;
     setTimeout(() => {
       this.isRestarting = false;
-      if (this.isContinuous && !this.isSpeaking && !this.isProcessing && !this.isListening && this.recognition) {
-        try {
-          this.recognition.start();
-        } catch (e) {}
+      if (this.isContinuous && !this.isSpeaking && !this.isProcessing && !this.isListening) {
+        this.startRecognition();
       }
     }, delayMs);
   }
@@ -198,10 +235,16 @@ export class SpeechService {
     this.language = lang;
     if (this.recognition) {
       this.recognition.lang = lang;
+      // If currently listening, restart recognition to apply new language immediately
+      if (this.isListening) {
+        try {
+          this.recognition.stop();
+        } catch (e) {}
+      }
     }
   }
 
-  async startContinuousMode(onTranscript, onInterimTranscript, onInterrupted) {
+  startContinuousMode(onTranscript, onInterimTranscript, onInterrupted) {
     this.isContinuous = true;
     this.isProcessing = false;
     this.onTranscript = onTranscript;
@@ -209,19 +252,18 @@ export class SpeechService {
     this.onInterrupted = onInterrupted;
     this.latestTranscript = '';
 
-    await this.initAudioHardware();
+    // 1. Start speech recognition immediately
+    this.startRecognition();
 
-    if (this.recognition && !this.isListening && !this.isSpeaking) {
-      try {
-        this.recognition.start();
-      } catch (err) {}
-    }
+    // 2. Initialize optional hardware audio visualizer in background (does NOT block speech recognition)
+    this.initAudioHardware().catch(() => {});
   }
 
   stopContinuousMode() {
     this.isContinuous = false;
     this.isProcessing = false;
     clearTimeout(this.silenceTimer);
+    clearTimeout(this.processingWatchdog);
     this.latestTranscript = '';
     this.stopSpeaking();
 
@@ -243,10 +285,23 @@ export class SpeechService {
   }
 
   speak(text, onStart, onEnd) {
+    clearTimeout(this.processingWatchdog);
+
+    if (!text || !text.trim()) {
+      this.isProcessing = false;
+      this.isSpeaking = false;
+      if (onEnd) onEnd();
+      if (this.isContinuous) this.restartRecognitionWithDelay(250);
+      return;
+    }
+
     if (!this.synthesis) {
       this.isProcessing = false;
       if (onStart) onStart();
-      setTimeout(() => { if (onEnd) onEnd(); }, 2500);
+      setTimeout(() => { 
+        if (onEnd) onEnd(); 
+        if (this.isContinuous) this.restartRecognitionWithDelay(250);
+      }, 2500);
       return;
     }
 
@@ -265,13 +320,31 @@ export class SpeechService {
     utterance.pitch = 1.03;
 
     const voices = this.synthesis.getVoices();
-    const urduVoice = voices.find(v => v.lang.includes('ur') || v.lang.includes('hi') || v.name.includes('Urdu') || v.name.includes('Hindi'));
-    const englishVoice = voices.find(v => v.lang.includes('en-GB') || v.lang.includes('en-US'));
+    const urduVoice = voices.find(v => {
+      const l = (v.lang || '').toLowerCase();
+      const n = (v.name || '').toLowerCase();
+      return l.includes('ur') || l.includes('hi') || n.includes('urdu') || n.includes('hindi');
+    });
+    const englishVoice = voices.find(v => {
+      const l = (v.lang || '').toLowerCase();
+      return l.includes('en-gb') || l.includes('en-us') || l.includes('en');
+    });
 
-    if (this.language.startsWith('ur') && urduVoice) {
-      utterance.voice = urduVoice;
-    } else if (englishVoice) {
-      utterance.voice = englishVoice;
+    if (this.language.startsWith('ur')) {
+      if (urduVoice) {
+        utterance.voice = urduVoice;
+        utterance.lang = urduVoice.lang || 'ur-PK';
+      } else {
+        utterance.lang = 'ur-PK';
+        if (englishVoice) {
+          utterance.voice = englishVoice;
+        }
+      }
+    } else {
+      if (englishVoice) {
+        utterance.voice = englishVoice;
+        utterance.lang = englishVoice.lang || 'en-US';
+      }
     }
 
     utterance.onstart = () => {

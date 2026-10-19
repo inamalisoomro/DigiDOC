@@ -64,11 +64,13 @@ Severe chest pain/pressure radiating to left arm/jaw, acute shortness of breath,
 
 export class GeminiService {
   constructor() {
-    this.apiKey = localStorage.getItem('digidoc_groq_api_key') || 
-                  localStorage.getItem('digidoc_gemini_api_key') || 
-                  import.meta.env.VITE_GROQ_API_KEY || 
-                  import.meta.env.VITE_GEMINI_API_KEY || 
-                  '';
+    this.groqApiKey = localStorage.getItem('digidoc_groq_api_key') || 
+                      import.meta.env.VITE_GROQ_API_KEY || 
+                      '';
+    this.geminiApiKey = localStorage.getItem('digidoc_gemini_api_key') || 
+                        import.meta.env.VITE_GEMINI_API_KEY || 
+                        '';
+    this.apiKey = this.groqApiKey || this.geminiApiKey;
     this.history = [];
     this.quettaDoctors = quettaDoctors || [];
     this.diseasesData = diseasesData || {};
@@ -76,20 +78,28 @@ export class GeminiService {
   }
 
   setApiKey(key) {
-    this.apiKey = (key || '').trim();
-    if (this.apiKey.startsWith('gsk_')) {
-      localStorage.setItem('digidoc_groq_api_key', this.apiKey);
+    const cleanKey = (key || '').trim();
+    if (cleanKey.startsWith('gsk_')) {
+      this.groqApiKey = cleanKey;
+      localStorage.setItem('digidoc_groq_api_key', cleanKey);
+    } else if (cleanKey) {
+      this.geminiApiKey = cleanKey;
+      localStorage.setItem('digidoc_gemini_api_key', cleanKey);
     } else {
-      localStorage.setItem('digidoc_gemini_api_key', this.apiKey);
+      this.groqApiKey = '';
+      this.geminiApiKey = '';
+      localStorage.removeItem('digidoc_groq_api_key');
+      localStorage.removeItem('digidoc_gemini_api_key');
     }
+    this.apiKey = this.groqApiKey || this.geminiApiKey;
   }
 
   getApiKey() {
-    return this.apiKey;
+    return this.groqApiKey || this.geminiApiKey || '';
   }
 
   isGroqKey() {
-    return Boolean(this.apiKey && this.apiKey.startsWith('gsk_'));
+    return Boolean(this.groqApiKey && this.groqApiKey.startsWith('gsk_'));
   }
 
   resetChat() {
@@ -97,14 +107,9 @@ export class GeminiService {
   }
 
   async sendMessage(userMessage) {
-    // If no API key provided, fall back to our advanced local clinical engine grounded in the 3 JSON files
-    if (!this.apiKey) {
-      return this.localClinicalEngine(userMessage);
-    }
-
-    try {
-      // 1. Groq Ultra-Fast API Integration
-      if (this.isGroqKey()) {
+    // 1. Try Groq Ultra-Fast API Integration if key available
+    if (this.groqApiKey) {
+      try {
         const messages = [
           {
             role: 'system',
@@ -117,7 +122,14 @@ export class GeminiService {
           { role: 'user', content: userMessage }
         ];
 
-        const groqModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+        const groqModels = [
+          'qwen/qwen3.8-27b',
+          'openai/gpt-oss-120b',
+          'openai/gpt-oss-20b',
+          'llama-3.3-70b-versatile',
+          'llama-3.1-8b-instant'
+        ];
+
         let reply = '';
         let lastError = null;
 
@@ -126,7 +138,7 @@ export class GeminiService {
             const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${this.apiKey}`,
+                'Authorization': `Bearer ${this.groqApiKey}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
@@ -147,60 +159,75 @@ export class GeminiService {
             if (reply) break;
           } catch (err) {
             lastError = err;
-            console.warn(`Groq model ${model} failed, trying fallback:`, err);
+            console.warn(`Groq model ${model} failed, trying fallback:`, err.message);
           }
         }
 
-        if (!reply) {
-          throw lastError || new Error('No response from Groq API');
+        if (reply) {
+          this.history.push({ role: 'user', parts: [{ text: userMessage }] });
+          this.history.push({ role: 'model', parts: [{ text: reply }] });
+          return this.parseReactionTags(reply);
         }
-
-        this.history.push({ role: 'user', parts: [{ text: userMessage }] });
-        this.history.push({ role: 'model', parts: [{ text: reply }] });
-
-        return this.parseReactionTags(reply);
+      } catch (err) {
+        console.warn("Groq attempt failed, checking fallback:", err);
       }
-
-      // 2. Google Gemini API Integration
-      this.history.push({ role: 'user', parts: [{ text: userMessage }] });
-
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`;
-      
-      const payload = {
-        systemInstruction: {
-          parts: [{ 
-            text: `${SYSTEM_PROMPT}\n\nRELEVANT CLINICAL DATA SUMMARY:\nTotal Quetta Doctors in Directory: ${this.quettaDoctors.length}\nTotal Standard Lab Tests Available: ${this.labRangesData.tests?.length || 424}` 
-          }]
-        },
-        contents: this.history,
-        generationConfig: {
-          temperature: 0.35,
-          topP: 0.95,
-          maxOutputTokens: 850
-        }
-      };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `API error ${res.status}`);
-      }
-
-      const data = await res.json();
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      
-      this.history.push({ role: 'model', parts: [{ text: reply }] });
-
-      return this.parseReactionTags(reply);
-    } catch (err) {
-      console.warn("AI API call failed, falling back to local clinical knowledge bases:", err);
-      return this.localClinicalEngine(userMessage, err.message);
     }
+
+    // 2. Try Google Gemini API Integration if key available
+    if (this.geminiApiKey) {
+      try {
+        const geminiModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+        let reply = '';
+
+        for (const model of geminiModels) {
+          try {
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+            
+            const payload = {
+              systemInstruction: {
+                parts: [{ 
+                  text: `${SYSTEM_PROMPT}\n\nRELEVANT CLINICAL DATA SUMMARY:\nTotal Quetta Doctors in Directory: ${this.quettaDoctors.length}\nTotal Standard Lab Tests Available: ${this.labRangesData.tests?.length || 424}` 
+                }]
+              },
+              contents: [
+                ...this.history,
+                { role: 'user', parts: [{ text: userMessage }] }
+              ],
+              generationConfig: {
+                temperature: 0.35,
+                topP: 0.95,
+                maxOutputTokens: 850
+              }
+            };
+
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              reply = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              if (reply) break;
+            }
+          } catch (e) {
+            console.warn(`Gemini model ${model} notice:`, e.message);
+          }
+        }
+
+        if (reply) {
+          this.history.push({ role: 'user', parts: [{ text: userMessage }] });
+          this.history.push({ role: 'model', parts: [{ text: reply }] });
+          return this.parseReactionTags(reply);
+        }
+      } catch (err) {
+        console.warn("Gemini API call failed:", err);
+      }
+    }
+
+    // 3. Fallback to offline local clinical engine
+    return this.localClinicalEngine(userMessage);
   }
 
   parseReactionTags(text) {

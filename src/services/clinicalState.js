@@ -157,6 +157,7 @@ export class ClinicalStateManager {
    */
   isSymptomNegated(text, symptom) {
     const lower = text.toLowerCase();
+    const normalizedLower = lower.replace(/\bme\b/g, 'mein');
     const allKeywords = [
       ...(symptom.keywords?.en || []),
       ...(symptom.keywords?.ur || []),
@@ -165,22 +166,37 @@ export class ClinicalStateManager {
 
     for (const kw of allKeywords) {
       const kwLower = kw.toLowerCase();
-      const idx = lower.indexOf(kwLower);
-      if (idx === -1 && !text.includes(kw)) continue;
+      let idx = normalizedLower.indexOf(kwLower);
+      if (idx === -1) {
+        idx = lower.indexOf(kwLower);
+      }
+      // Check exact keyword match
+      if (idx === -1 && text.includes(kw)) {
+        idx = text.indexOf(kw);
+      }
+      // Check Urdu verb stem (e.g. "چکر آنا" -> "چکر")
+      if (idx === -1) {
+        const urStem = kw.replace(/\s+(آنا|ہونا|لگنا|کرنا|پڑنا)$/, '').trim();
+        if (urStem.length >= 2 && text.includes(urStem)) {
+          idx = text.indexOf(urStem);
+        }
+      }
+      if (idx === -1) continue;
 
       // Check text surrounding the keyword (within 35 characters)
       const start = Math.max(0, idx - 30);
       const end = Math.min(lower.length, idx + kwLower.length + 30);
-      const windowText = lower.substring(start, end);
+      const windowText = normalizedLower.substring(start, end);
+      const windowRaw = text.substring(start, end);
 
       const negationMarkers = [
         'no', 'not', 'without', 'never', 'denies', "don't", 'dont', "didn't",
         'nahi', 'nahin', 'nahi hai', 'nahin hai', 'na hai', 'nahi hui', 'nahin hui',
-        'نہیں', 'نہ', 'بغیر'
+        'نہیں', 'نہ', 'بغیر', 'نہیں ہے', 'نہیں ہوئی', 'نہیں ہوا'
       ];
 
       for (const neg of negationMarkers) {
-        if (windowText.includes(neg)) {
+        if (windowText.includes(neg) || windowRaw.includes(neg)) {
           return true;
         }
       }
@@ -194,6 +210,7 @@ export class ClinicalStateManager {
    */
   extractSymptomsWithNegation(text) {
     const lower = text.toLowerCase();
+    const normalizedLower = lower.replace(/\bme\b/g, 'mein');
     const confirmed = [];
     const denied = [];
 
@@ -206,7 +223,14 @@ export class ClinicalStateManager {
 
       let matched = false;
       for (const kw of allKeywords) {
-        if (lower.includes(kw.toLowerCase()) || text.includes(kw)) {
+        const kwLower = kw.toLowerCase();
+        if (normalizedLower.includes(kwLower) || lower.includes(kwLower) || text.includes(kw)) {
+          matched = true;
+          break;
+        }
+        // Urdu stem match for infinitive verbal forms (e.g. "چکر آنا" -> "چکر")
+        const urStem = kw.replace(/\s+(آنا|ہونا|لگنا|کرنا|پڑنا)$/, '').trim();
+        if (urStem.length >= 2 && text.includes(urStem)) {
           matched = true;
           break;
         }
@@ -232,22 +256,22 @@ export class ClinicalStateManager {
     let duration = '';
     let onset = '';
 
-    // Numeric + unit patterns: e.g. "2 din", "3 days", "1 hafta", "2 hours"
-    const durationRegex = /(\d+|ek|aik|do|teen|char|paanch)\s*(din|days?|hafte|haftay|weeks?|ghante|hours?|mahine|months?)/i;
-    const match = lower.match(durationRegex);
+    // Numeric + unit patterns: e.g. "2 din", "3 days", "1 hafta", "2 hours", "دو دن", "2 دن"
+    const durationRegex = /(\d+|ek|aik|do|teen|char|paanch|[۰-۹]+|ایک|دو|تین|چار|پانچ)\s*(din|days?|hafte|haftay|weeks?|ghante|hours?|mahine|months?|دن|ہفتے|ہفتہ|گھنٹے|ماہ|مہینے)/i;
+    const match = lower.match(durationRegex) || text.match(durationRegex);
     if (match) {
       duration = match[0].trim();
       onset = `${duration} ago / pehle`;
     }
 
     // Relative day phrases
-    if (lower.includes('kal se') || lower.includes('since yesterday') || lower.includes('yesterday')) {
+    if (lower.includes('kal se') || lower.includes('since yesterday') || lower.includes('yesterday') || text.includes('کل سے')) {
       duration = '1 day (kal se)';
       onset = 'yesterday / kal';
-    } else if (lower.includes('aaj se') || lower.includes('today') || lower.includes('subah se') || lower.includes('chand ghante')) {
+    } else if (lower.includes('aaj se') || lower.includes('today') || lower.includes('subah se') || lower.includes('chand ghante') || text.includes('آج سے') || text.includes('صبح سے')) {
       duration = 'few hours / today';
       onset = 'today / aaj';
-    } else if (lower.includes('hafta') || lower.includes('week') || lower.includes('hafte se')) {
+    } else if (lower.includes('hafta') || lower.includes('week') || lower.includes('hafte se') || text.includes('ہفتے سے') || text.includes('ہفتہ')) {
       if (!duration) duration = '1 week';
       if (!onset) onset = 'past week';
     }

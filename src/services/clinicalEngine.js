@@ -364,7 +364,10 @@ ${followUp.text}`;
     // 6. Follow-up Duration / Severity provided without named symptom
     if (text.includes('din') || text.includes('hafte') || text.includes('kal') ||
         text.includes('tez') || text.includes('halka') || text.includes('bohat') ||
-        text.includes('shadeed') || text.includes('days') || text.includes('yesterday')) {
+        text.includes('shadeed') || text.includes('days') || text.includes('yesterday') ||
+        text.includes('دن') || text.includes('ہفتہ') || text.includes('ہفتے') ||
+        text.includes('کل') || text.includes('تیز') || text.includes('ہلکا') ||
+        text.includes('بہت') || text.includes('شدید') || text.includes('آج')) {
       const generalDoc = this.doctors.find(d => d.primarySpecialty?.toLowerCase().includes('general medicine')) || this.doctors[1];
       const followUp = this.formulateAdaptiveFollowUp(state);
 
@@ -381,7 +384,12 @@ ${followUp.text}`,
     }
 
     // 7. Initial Greeting ONLY if first turn
-    if (this.conversationTurn === 1 && (text.includes('salam') || text.includes('hello') || text.includes('hi') || text.length < 5)) {
+    const isGreeting = text.includes('salam') || text.includes('hello') || text.includes('hi') ||
+      text.includes('سلام') || text.includes('السلام علیکم') || text.includes('وعلیکم') ||
+      text.includes('آداب') || text.includes('کیسے ہیں') || text.includes('کیا حال') ||
+      text.includes('kia hal') || text.includes('kese ho');
+
+    if (this.conversationTurn === 1 && (isGreeting || text.length < 5)) {
       return {
         rawText: `[WARM_SMILE] Assalam-o-Alaikum! Main DigiDoc hoon, aapka digital healthcare consultant. [LISTENING_ATTENTIVE] Main aapki sehat ke hawalay se sun raha hoon. Apni takleef, alamaat ya lab report aasaan alfaaz mein batayein.`,
         cleanSpeechText: `Assalam-o-Alaikum! Main DigiDoc hoon. Main aapki sehat ke hawalay se sun raha hoon. Apni takleef ya alamaat batayein.`,
