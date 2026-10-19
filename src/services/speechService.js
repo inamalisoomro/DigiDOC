@@ -63,9 +63,10 @@ export class SpeechService {
     if (this.vadInterval) clearInterval(this.vadInterval);
 
     const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    let bargeInFrames = 0; // counts consecutive loud frames during AI speech
 
     this.vadInterval = setInterval(() => {
-      if (!this.analyser || !this.isListening) {
+      if (!this.analyser) {
         this.currentVolume = 0;
         if (this.onVolumeChange) this.onVolumeChange(0);
         return;
@@ -80,8 +81,22 @@ export class SpeechService {
       const rms = Math.sqrt(sum / dataArray.length) / 255;
       this.currentVolume = rms;
 
-      if (this.onVolumeChange) {
+      // Report volume to UI only when actively listening
+      if (this.isListening && this.onVolumeChange) {
         this.onVolumeChange(rms);
+      }
+
+      // BARGE-IN: detect user speaking while AI is talking
+      // Requires 4 consecutive loud frames (~240ms) to avoid accidental triggers
+      if (this.isSpeaking && this.isContinuous && rms > 0.12) {
+        bargeInFrames++;
+        if (bargeInFrames >= 4) {
+          bargeInFrames = 0;
+          this.stopSpeaking();                            // stops AI, resets state, restarts mic
+          if (this.onInterrupted) this.onInterrupted();  // updates avatar to listening
+        }
+      } else {
+        bargeInFrames = 0;
       }
     }, 60);
   }
