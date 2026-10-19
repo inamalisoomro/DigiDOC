@@ -103,8 +103,14 @@ export class SpeechService {
       };
 
       this.recognition.onresult = (event) => {
-        // If AI is already speaking or processing, discard any incoming mic audio immediately!
-        if (this.isSpeaking || this.isProcessing) return;
+        // If AI is currently speaking, the user is interrupting — stop speech and listen!
+        if (this.isSpeaking) {
+          this.stopSpeaking();
+          if (this.onInterrupted) this.onInterrupted();
+        }
+
+        // If still processing (but not speaking), discard — avoid double-submit
+        if (this.isProcessing) return;
 
         let interim = '';
         let final = '';
