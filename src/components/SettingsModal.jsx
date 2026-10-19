@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, X, Sparkles, Volume2, Shield } from 'lucide-react';
+import { Key, X, Sparkles, Shield } from 'lucide-react';
 import './Modals.css';
 
 export default function SettingsModal({ 
@@ -40,15 +40,15 @@ export default function SettingsModal({
         <div className="modal-body">
           {/* API Key Form */}
           <form onSubmit={handleSave} className="api-key-section">
-            <label className="section-label">AI API Key (Groq / Gemini)</label>
+            <label className="section-label">AI API Key Pool (Groq / Gemini Multi-Key Support)</label>
             <p className="section-subtitle">
-              Enter your Groq API key (starts with <code>gsk_</code>) or Gemini key. If left blank, DigiDoc operates seamlessly on the local offline Pakistani clinical knowledge engine.
+              Enter one or multiple Groq (<code>gsk_...</code>) or Gemini keys separated by commas. DigiDoc automatically rotates through backup keys & models if any hit limits. If left blank, it runs on the instant offline clinical engine.
             </p>
             <div className="api-input-row">
               <input
                 type="password"
                 className="api-key-input"
-                placeholder="gsk_... or AIzaSy..."
+                placeholder="gsk_key1, gsk_key2... (Multiple backup keys supported)"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />

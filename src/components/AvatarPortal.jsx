@@ -54,7 +54,7 @@ export default function AvatarPortal({
 
   // Dynamic voice height for the 5 waveform bars
   const v = Math.min(1, Math.max(0, liveVolume * 8));
-  const isVoiceActive = liveVolume > 0.03 || isSpeaking || avatarState === 'speaking';
+  const isVoiceActive = (isListening && liveVolume > 0.03) || isSpeaking || avatarState === 'speaking';
 
   return (
     <div className={`avatar-portal-wrapper state-${avatarState}`}>

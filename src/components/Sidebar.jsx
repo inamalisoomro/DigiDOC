@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, MessageSquare, ClipboardList, Clock, Settings, User } from 'lucide-react';
+import { Home, MessageSquare, ClipboardList, Clock, Settings } from 'lucide-react';
 import './Sidebar.css';
 
 export default function Sidebar({ activeTab, onTabChange, onOpenSettings }) {

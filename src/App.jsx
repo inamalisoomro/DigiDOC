@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import AvatarPortal from './components/AvatarPortal';
@@ -120,6 +120,9 @@ function App() {
   // Send message to DigiDoc
   const handleSendMessage = useCallback(async (userText) => {
     if (!userText || !userText.trim()) return;
+
+    // Immediately stop any prior AI speech so it doesn't overlap
+    speechService.stopSpeaking();
 
     // Add user message
     setMessages(prev => [

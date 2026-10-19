@@ -47,7 +47,7 @@ const IMPROVING_KEYWORDS = {
   ]
 };
 
-const NEGATION_PATTERNS = [
+const _NEGATION_PATTERNS = [
   // English
   /\b(?:no|not|without|never|denies|haven't|dont have|don't have|did not|didn't)\s+([a-z\s]{2,25})\b/gi,
   // Roman Urdu (e.g. bukhar nahi hai, dard nahi, vomiting nahi hui)
@@ -71,9 +71,83 @@ export class ClinicalStateManager {
           }
         };
       }
+      if (sym.id === 'retro_orbital_pain') {
+        const en = sym.keywords?.en || [];
+        const rur = sym.keywords?.rur || [];
+        const ur = sym.keywords?.ur || [];
+        return {
+          ...sym,
+          keywords: {
+            en: [...en, 'eye pain', 'eyes pain', 'pain in eyes', 'pain in eye', 'eye ache', 'eyes ache', 'eyes hurt', 'eye hurts', 'eye strain', 'sore eyes', 'burning eyes'],
+            rur: [...rur, 'aankhon mein dard', 'aankh mein dard', 'aankhon me dard', 'aankh me dard', 'aankh dard', 'aankhon ka dard', 'aankh dukh', 'aankhein dukh', 'aankh dukhna', 'aankhon mein jalan'],
+            ur: [...ur, 'آنکھوں میں درد', 'آنکھ میں درد', 'آنکھ کا درد', 'آنکھیں دکھنا', 'آنکھ دکھنا', 'آنکھوں میں جلن', 'آنکھ']
+          }
+        };
+      }
+      if (sym.id === 'red_eye') {
+        const en = sym.keywords?.en || [];
+        const rur = sym.keywords?.rur || [];
+        const ur = sym.keywords?.ur || [];
+        return {
+          ...sym,
+          keywords: {
+            en: [...en, 'red eye', 'red eyes', 'pink eye', 'watery eyes', 'bloodshot eyes', 'eye redness', 'itchy eyes'],
+            rur: [...rur, 'aankh laal', 'aankhein laal', 'aankhon se pani', 'aankh surkh', 'aankhein surkh', 'aankh ka infection', 'ashoob e chashm'],
+            ur: [...ur, 'آنکھ سرخ', 'آنکھیں سرخ', 'آنکھ لال', 'آنکھوں سے پانی', 'آشوب چشم']
+          }
+        };
+      }
+      if (sym.id === 'ear_pain') {
+        const en = sym.keywords?.en || [];
+        const rur = sym.keywords?.rur || [];
+        const ur = sym.keywords?.ur || [];
+        return {
+          ...sym,
+          keywords: {
+            en: [...en, 'ear pain', 'ear ache', 'ear hurts', 'ears pain', 'pain in ear'],
+            rur: [...rur, 'kaan mein dard', 'kaan me dard', 'kaan dard', 'kaan ka dard'],
+            ur: [...ur, 'کان میں درد', 'کان کا درد']
+          }
+        };
+      }
       return sym;
     });
-    this.conditionsList = diseasesData.conditions || [];
+
+    // Also add explicit eye_pain symptom entry
+    if (!this.symptomsList.some(s => s.id === 'eye_pain')) {
+      this.symptomsList.push({
+        id: 'eye_pain',
+        name: {
+          en: 'Eye pain / Eye strain',
+          ur: 'آنکھوں میں درد',
+          rur: 'Aankhon mein dard'
+        },
+        implies: ['retro_orbital_pain'],
+        keywords: {
+          en: ['eye pain', 'eyes pain', 'pain in eyes', 'pain in eye', 'eye ache', 'eyes ache', 'eyes hurt', 'eye hurts', 'sore eyes', 'burning eyes', 'eye strain'],
+          rur: ['aankhon mein dard', 'aankh mein dard', 'aankhon me dard', 'aankh me dard', 'aankh dard', 'aankhon ka dard', 'aankh dukh', 'aankhein dukh', 'aankh dukhna', 'aankhon mein jalan'],
+          ur: ['آنکھوں میں درد', 'آنکھ میں درد', 'آنکھ کا درد', 'آنکھیں دکھنا', 'آنکھ دکھنا', 'آنکھوں میں جلن', 'آنکھ']
+        }
+      });
+    }
+
+    this.conditionsList = (diseasesData.conditions || []).map(cond => {
+      // Connect eye_pain & retro_orbital_pain to conjunctivitis / eye infection
+      if (cond.id === 'conjunctivitis') {
+        const existingSyms = cond.symptoms || [];
+        const hasRetro = existingSyms.some(s => s.id === 'retro_orbital_pain');
+        const hasEye = existingSyms.some(s => s.id === 'eye_pain');
+        const newSyms = [...existingSyms];
+        if (!hasRetro) newSyms.push({ id: 'retro_orbital_pain', weight: 0.85 });
+        if (!hasEye) newSyms.push({ id: 'eye_pain', weight: 0.85 });
+        return {
+          ...cond,
+          symptoms: newSyms
+        };
+      }
+      return cond;
+    });
+
     this.redFlagRules = diseasesData.red_flag_rules || [];
     this.reset();
   }

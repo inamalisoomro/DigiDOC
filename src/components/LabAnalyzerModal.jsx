@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Activity, Search, AlertTriangle, CheckCircle2, User, HelpCircle } from 'lucide-react';
+import { X, Activity, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import labReferenceData from '../data/lab_reference_ranges.json';
 import './Modals.css';
 

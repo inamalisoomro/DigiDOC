@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { X, User, Bot, Volume2, ShieldAlert } from 'lucide-react';
+import { X, User, Bot, Volume2 } from 'lucide-react';
 import './ConversationDrawer.css';
 
 export default function ConversationDrawer({ 

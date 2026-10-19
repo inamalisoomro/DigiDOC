@@ -17,6 +17,18 @@ export class SpeechService {
     this.latestTranscript = '';
     this.silenceTimer = null;
     this.isRestarting = false;
+    this.speechStartTime = null;
+    this.cachedVoices = [];
+
+    // Preload speech synthesis voices
+    if (this.synthesis) {
+      this.cachedVoices = this.synthesis.getVoices() || [];
+      if (typeof this.synthesis.onvoiceschanged !== 'undefined') {
+        this.synthesis.onvoiceschanged = () => {
+          this.cachedVoices = this.synthesis.getVoices() || [];
+        };
+      }
+    }
 
     // Callbacks
     this.onListeningChange = null;
@@ -39,7 +51,7 @@ export class SpeechService {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: true,
+            autoGainControl: false, // Prevents mic from ramping up gain and picking up breathing/air
             channelCount: 1
           }
         });
@@ -49,7 +61,7 @@ export class SpeechService {
         const source = this.audioContext.createMediaStreamSource(this.microphoneStream);
         this.analyser = this.audioContext.createAnalyser();
         this.analyser.fftSize = 256;
-        this.analyser.smoothingTimeConstant = 0.4;
+        this.analyser.smoothingTimeConstant = 0.3;
         source.connect(this.analyser);
 
         this.startVADLoop();
@@ -63,7 +75,7 @@ export class SpeechService {
     if (this.vadInterval) clearInterval(this.vadInterval);
 
     const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-    let bargeInFrames = 0; // counts consecutive loud frames during AI speech
+    let bargeInFrames = 0; // counts consecutive voice-energy frames during AI speech
 
     this.vadInterval = setInterval(() => {
       if (!this.analyser) {
@@ -74,23 +86,46 @@ export class SpeechService {
 
       this.analyser.getByteFrequencyData(dataArray);
 
-      let sum = 0;
+      // Frequency bin analysis:
+      // fftSize = 256 => 128 frequency bins
+      // Bins 0-1 (~0-350Hz): Low-frequency breath pops, wind rumble, desk vibration
+      // Bins 2-18 (~350-3400Hz): Core human voice fundamental & formants
+      let lowSum = 0;
+      let voiceSum = 0;
+      let totalSum = 0;
+
       for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i] * dataArray[i];
+        const val = dataArray[i];
+        totalSum += val * val;
+        if (i <= 1) {
+          lowSum += val * val;
+        } else if (i >= 2 && i <= 18) {
+          voiceSum += val * val;
+        }
       }
-      const rms = Math.sqrt(sum / dataArray.length) / 255;
-      this.currentVolume = rms;
+
+      const totalRms = Math.sqrt(totalSum / dataArray.length) / 255;
+      const voiceRms = Math.sqrt(voiceSum / 17) / 255;
+      const lowRms = Math.sqrt(lowSum / 2) / 255;
+
+      this.currentVolume = voiceRms > 0.04 ? voiceRms : (totalRms * 0.7);
 
       // Report volume to UI only when actively listening
       if (this.isListening && this.onVolumeChange) {
-        this.onVolumeChange(rms);
+        this.onVolumeChange(this.currentVolume);
       }
 
-      // BARGE-IN: detect user speaking while AI is talking
-      // Requires 4 consecutive loud frames (~240ms) to avoid accidental triggers
-      if (this.isSpeaking && this.isContinuous && rms > 0.12) {
+      // BARGE-IN: detect deliberate user speech while AI is talking
+      // 1. Must be actively speaking and continuous mode enabled
+      // 2. 400ms grace period after AI speech begins (suppresses speaker click, but allows quick interruption)
+      // 3. Human voice energy (voiceRms > 0.15) distinct from low-frequency breath
+      // 4. Requires only 3 consecutive frames (~180ms) for responsive interruption
+      const isPastGracePeriod = this.speechStartTime && (Date.now() - this.speechStartTime > 400);
+      const isVoiceEnergy = voiceRms > 0.15 && (voiceRms > lowRms * 0.55 || lowRms < 0.4);
+
+      if (this.isSpeaking && this.isContinuous && isPastGracePeriod && isVoiceEnergy) {
         bargeInFrames++;
-        if (bargeInFrames >= 4) {
+        if (bargeInFrames >= 3) {
           bargeInFrames = 0;
           this.stopSpeaking();                            // stops AI, resets state, restarts mic
           if (this.onInterrupted) this.onInterrupted();  // updates avatar to listening
@@ -106,7 +141,7 @@ export class SpeechService {
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRec) {
       this.recognition = new SpeechRec();
-      this.recognition.continuous = false;
+      this.recognition.continuous = true; // Stays active continuously
       this.recognition.interimResults = true;
       this.recognition.maxAlternatives = 1;
       this.recognition.lang = this.language;
@@ -114,48 +149,49 @@ export class SpeechService {
       this.recognition.onstart = () => {
         this.isListening = true;
         this.latestTranscript = '';
+        this.accumulatedTranscript = '';
         if (this.onListeningChange) this.onListeningChange(true);
       };
 
       this.recognition.onresult = (event) => {
-        // If AI is already speaking or processing, discard any incoming mic audio immediately!
-        if (this.isSpeaking || this.isProcessing) return;
+        // Interruption: if AI is speaking and user speaks, stop AI immediately!
+        if (this.isSpeaking) {
+          this.stopSpeaking();
+          if (this.onInterrupted) this.onInterrupted();
+          return;
+        }
 
-        let interim = '';
-        let final = '';
+        if (this.isProcessing) return;
+
+        let currentInterim = '';
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const res = event.results[i];
           if (res.isFinal) {
-            final += res[0].transcript;
+            this.accumulatedTranscript = (this.accumulatedTranscript + ' ' + res[0].transcript).trim();
           } else {
-            interim += res[0].transcript;
+            currentInterim = (currentInterim + ' ' + res[0].transcript).trim();
           }
         }
 
-        const candidate = (final || interim).trim();
-        if (!candidate || candidate.length < 2) return;
+        const fullSpoken = (this.accumulatedTranscript + ' ' + currentInterim).trim();
+        if (!fullSpoken || fullSpoken.length < 2) return;
 
-        this.latestTranscript = candidate;
+        this.latestTranscript = fullSpoken;
 
         // Emit interim live words to the UI
         if (this.onInterimTranscript) {
-          this.onInterimTranscript(candidate);
+          this.onInterimTranscript(fullSpoken);
         }
 
-        // If marked final by Google STT engine, commit immediately!
-        if (final) {
-          this.commitTranscript(final);
-          return;
-        }
-
-        // Fast silence cutoff (650ms after user pauses speaking)
+        // Natural calm pause cutoff (800ms after user finishes full sentence)
+        // This gives the user time to speak their complete thought without getting cut off on the first word!
         clearTimeout(this.silenceTimer);
         this.silenceTimer = setTimeout(() => {
           if (this.latestTranscript && this.latestTranscript.length >= 2 && !this.isSpeaking && !this.isProcessing) {
             this.commitTranscript(this.latestTranscript);
           }
-        }, 650);
+        }, 800);
       };
 
       this.recognition.onerror = (event) => {
@@ -166,13 +202,12 @@ export class SpeechService {
           this.isListening = false;
           if (this.onListeningChange) this.onListeningChange(false);
         }
-        // Network error: Google STT servers unreachable — auto-retry after 2s
-        // isRestarting=true prevents onend from firing a duplicate restart
+        // Network error: Google STT servers unreachable — auto-retry after 1s
         if (event.error === 'network') {
           this.isListening = false;
           if (this.onListeningChange) this.onListeningChange(false);
           if (this.isContinuous && !this.isSpeaking && !this.isProcessing) {
-            this.restartRecognitionWithDelay(2000);
+            this.restartRecognitionWithDelay(1000);
           }
         }
       };
@@ -181,9 +216,9 @@ export class SpeechService {
         this.isListening = false;
         if (this.onListeningChange) this.onListeningChange(false);
 
-        // Resume listening ONLY if continuous is on AND AI is NOT speaking and NOT processing
+        // Resume listening immediately if continuous is on AND AI is NOT speaking and NOT processing
         if (this.isContinuous && !this.isSpeaking && !this.isProcessing && !this.isRestarting) {
-          this.restartRecognitionWithDelay(300);
+          this.restartRecognitionWithDelay(30);
         }
       };
     }
@@ -198,7 +233,7 @@ export class SpeechService {
     try {
       this.recognition.lang = this.language;
       this.recognition.start();
-    } catch (e) {
+    } catch {
       // If recognition was in an invalid state, re-create fresh instance
       this.initRecognition();
       try {
@@ -216,6 +251,7 @@ export class SpeechService {
     clearTimeout(this.silenceTimer);
     const cleanText = text.trim();
     this.latestTranscript = '';
+    this.accumulatedTranscript = '';
 
     if (cleanText && cleanText.length >= 2) {
       // Mark as processing so onend will NOT restart recognition while AI prepares answer!
@@ -235,7 +271,7 @@ export class SpeechService {
 
       try {
         this.recognition.stop();
-      } catch (e) {}
+      } catch {}
 
       if (this.onTranscript) {
         this.onTranscript(cleanText);
@@ -263,7 +299,7 @@ export class SpeechService {
       if (this.isListening) {
         try {
           this.recognition.stop();
-        } catch (e) {}
+        } catch {}
       }
     }
   }
@@ -294,7 +330,7 @@ export class SpeechService {
     if (this.recognition) {
       try {
         this.recognition.stop();
-      } catch (err) {}
+      } catch {}
     }
 
     if (this.microphoneStream) {
@@ -314,17 +350,19 @@ export class SpeechService {
     if (!text || !text.trim()) {
       this.isProcessing = false;
       this.isSpeaking = false;
+      this.speechStartTime = null;
       if (onEnd) onEnd();
-      if (this.isContinuous) this.restartRecognitionWithDelay(250);
+      if (this.isContinuous) this.restartRecognitionWithDelay(200);
       return;
     }
 
     if (!this.synthesis) {
       this.isProcessing = false;
+      this.speechStartTime = null;
       if (onStart) onStart();
       setTimeout(() => { 
         if (onEnd) onEnd(); 
-        if (this.isContinuous) this.restartRecognitionWithDelay(250);
+        if (this.isContinuous) this.restartRecognitionWithDelay(200);
       }, 2500);
       return;
     }
@@ -336,14 +374,17 @@ export class SpeechService {
     if (this.recognition) {
       try {
         this.recognition.stop();
-      } catch (e) {}
+      } catch {}
     }
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.98;
     utterance.pitch = 1.03;
 
-    const voices = this.synthesis.getVoices();
+    const voices = (this.cachedVoices && this.cachedVoices.length > 0)
+      ? this.cachedVoices
+      : (this.synthesis.getVoices() || []);
+
     const urduVoice = voices.find(v => {
       const l = (v.lang || '').toLowerCase();
       const n = (v.name || '').toLowerCase();
@@ -373,6 +414,7 @@ export class SpeechService {
 
     utterance.onstart = () => {
       this.isSpeaking = true;
+      this.speechStartTime = Date.now();
       this.isProcessing = false;
       if (this.onSpeakingChange) this.onSpeakingChange(true);
       if (onStart) onStart();
@@ -380,25 +422,27 @@ export class SpeechService {
 
     utterance.onend = () => {
       this.isSpeaking = false;
+      this.speechStartTime = null;
       this.isProcessing = false;
       if (this.onSpeakingChange) this.onSpeakingChange(false);
       if (onEnd) onEnd();
 
-      // DigiDoc finished speaking! Wait 350ms for room echo to disperse, then restart listening
+      // DigiDoc finished speaking! Instantly restart listening so no user words are missed
       if (this.isContinuous) {
-        this.restartRecognitionWithDelay(350);
+        this.restartRecognitionWithDelay(40);
       }
     };
 
     utterance.onerror = (e) => {
       console.warn("Speech synthesis notice:", e);
       this.isSpeaking = false;
+      this.speechStartTime = null;
       this.isProcessing = false;
       if (this.onSpeakingChange) this.onSpeakingChange(false);
       if (onEnd) onEnd();
 
       if (this.isContinuous) {
-        this.restartRecognitionWithDelay(350);
+        this.restartRecognitionWithDelay(40);
       }
     };
 
@@ -408,13 +452,16 @@ export class SpeechService {
   stopSpeaking() {
     if (this.synthesis) {
       this.synthesis.cancel();
-      this.isSpeaking = false;
-      this.isProcessing = false;
-      if (this.onSpeakingChange) this.onSpeakingChange(false);
+    }
+    this.isSpeaking = false;
+    this.speechStartTime = null;
+    this.isProcessing = false;
+    this.latestTranscript = '';
+    this.accumulatedTranscript = '';
+    if (this.onSpeakingChange) this.onSpeakingChange(false);
 
-      if (this.isContinuous) {
-        this.restartRecognitionWithDelay(250);
-      }
+    if (this.isContinuous) {
+      this.restartRecognitionWithDelay(30);
     }
   }
 }

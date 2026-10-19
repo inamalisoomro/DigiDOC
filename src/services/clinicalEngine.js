@@ -1,7 +1,7 @@
 import diseasesData from '../data/diseases_conditions.json';
 import quettaDoctors from '../data/quetta_doctors.json';
 import labRangesData from '../data/lab_reference_ranges.json';
-import { clinicalState, ClinicalStateManager } from './clinicalState';
+import { clinicalState } from './clinicalState';
 
 export class ClinicalEngine {
   constructor() {
@@ -45,16 +45,49 @@ export class ClinicalEngine {
   }
 
   /**
-   * Find Quetta Doctor by specialty.
+   * Find Quetta Doctor by specialty with priority for doctors with verified contact numbers.
    */
   findQuettaDoctor(specialtyKey) {
-    const specInfo = this.specialtiesMap[specialtyKey];
-    const specEn = specInfo?.en?.toLowerCase() || '';
+    const specialtyMapping = {
+      ophthalmologist: ['Ophthalmology'],
+      cardiologist: ['Cardiology'],
+      neurologist: ['Neurology', 'Neurosurgery'],
+      pulmonologist: ['Pulmonology'],
+      gastroenterologist: ['Gastroenterology'],
+      dermatologist: ['Dermatology'],
+      ent: ['ENT'],
+      dentist: ['Dentistry', 'Orthodontics'],
+      urologist: ['Urology'],
+      nephrologist: ['Nephrology'],
+      oncologist: ['Oncology'],
+      psychiatrist: ['Psychiatry', 'Neuropsychiatry'],
+      rheumatologist: ['Rheumatology'],
+      diabetologist: ['Diabetology', 'Endocrinology'],
+      endocrinologist: ['Endocrinology', 'Diabetology'],
+      general_surgeon: ['General Surgery', 'Laparoscopic Surgery'],
+      gp: ['General Medicine', 'Internal Medicine', 'Family Medicine'],
+      infectious_disease: ['Infectious Diseases', 'General Medicine', 'Internal Medicine']
+    };
 
-    const matched = this.doctors.find(d => {
-      const primary = d.primarySpecialty?.toLowerCase() || '';
-      return primary.includes(specEn) || (specEn && primary.includes(specEn.split(' ')[0]));
-    });
+    const targetSpecs = specialtyMapping[specialtyKey] || [];
+    
+    // 1. First look for matching specialty with verified public phone
+    let matched = this.doctors.find(d => targetSpecs.includes(d.primarySpecialty) && Boolean(d.publicPhone));
+    
+    // 2. Otherwise look for matching specialty without phone
+    if (!matched) {
+      matched = this.doctors.find(d => targetSpecs.includes(d.primarySpecialty));
+    }
+
+    // 3. Fallback to broad substring search
+    if (!matched) {
+      const specInfo = this.specialtiesMap[specialtyKey];
+      const specEn = specInfo?.en?.toLowerCase() || '';
+      matched = this.doctors.find(d => {
+        const primary = d.primarySpecialty?.toLowerCase() || '';
+        return primary.includes(specEn) || (specEn && primary.includes(specEn.split(' ')[0]));
+      });
+    }
 
     return matched || this.doctors[0];
   }
@@ -398,14 +431,104 @@ ${followUp.text}`,
       };
     }
 
-    // 8. Natural non-repetitive clarification if not understood
+    // 8. Anatomical & Organ Direct Matcher (Eyes, Ears, Teeth, Skin, Joints, Stomach)
+    // Direct routing if patient specifies body area
+    if (text.includes('eye') || text.includes('aankh') || text.includes('vision') || text.includes('آنکھ') || text.includes('نظر')) {
+      const eyeDoc = this.findQuettaDoctor('ophthalmologist');
+      return {
+        rawText: `[NOD_EMPATHETIC] Main aapki aankhon ki takleef (Eye Pain / Strain) samajh sakta hoon.
+[SPEAKING_REASSURING] Aankhon ka dard infection (jaise conjunctivitis/ashoob-e-chashm), barhti screen timing, ya allergy ki taraf ishara kar sakta hai. Kisi qisam ki gher-tasdeeq shuda drop daalne se parhez karein.
+- **Mahir Doctor:** Aap Quetta mein **${eyeDoc.name}** (${eyeDoc.primarySpecialty} - ${eyeDoc.hospitalOrClinic}) se rabta karein (Phone: ${eyeDoc.publicPhone || '081-2829915'}).
+
+Kya is ke sath aankh mein surkhi (redness), paani nikalna, ya nazar mein dhundla-pan bhi hai?`,
+        cleanSpeechText: `Main aapki aankhon ki takleef samajh sakta hoon. Yeh aankh ka infection ya strain ho sakta hai. Aap Quetta mein ${eyeDoc.name} se rabta karein. Kya aankh mein surkhi ya dhundla pan hai?`,
+        primaryTag: 'SPEAKING_REASSURING',
+        isUrgent: false
+      };
+    }
+
+    if (text.includes('ear') || text.includes('kaan') || text.includes('hear') || text.includes('کان')) {
+      const entDoc = this.findQuettaDoctor('ent');
+      return {
+        rawText: `[NOD_EMPATHETIC] Main aapke kaan ki takleef samajh raha hoon.
+[SPEAKING_REASSURING] Kaan ka dard kisi androni infection, resha jamne ya mail (wax) ki wajah se ho sakta hai. Kaan mein teeli ya tail daalne se sakhti se parhez karein.
+- **Mahir Doctor:** Aap Quetta mein **${entDoc.name}** (${entDoc.primarySpecialty} - ${entDoc.hospitalOrClinic}) se rabta karein (Phone: ${entDoc.publicPhone || '081-2829915'}).
+
+Kya kaan mein dard ke sath aawaz kam sunayi de rahi hai ya chakkar aane ki shikayat hai?`,
+        cleanSpeechText: `Main aapke kaan ki takleef samajh raha hoon. Aap Quetta mein ${entDoc.name} se rabta karein. Kya aawaz kam sunayi de rahi hai?`,
+        primaryTag: 'SPEAKING_REASSURING',
+        isUrgent: false
+      };
+    }
+
+    if (text.includes('tooth') || text.includes('teeth') || text.includes('daant') || text.includes('dant') || text.includes('masoorh') || text.includes('دانت')) {
+      const dentist = this.findQuettaDoctor('dentist');
+      return {
+        rawText: `[NOD_EMPATHETIC] Daant ka dard waqayi shadeed hota hai, main samajh sakta hoon.
+[SPEAKING_REASSURING] Yeh cavity, masoorhon ki soojan ya androni nerve infection ki alamat ho sakti hai. Nimak milay neem garam paani se kulli karein.
+- **Mahir Doctor:** Aap Quetta mein **${dentist.name}** (${dentist.primarySpecialty} - ${dentist.hospitalOrClinic}) se rabta karein (Phone: ${dentist.publicPhone || '081-2829915'}).
+
+Kya thanda ya garam lagne par shadeed tees uthti hai?`,
+        cleanSpeechText: `Daant ka dard waqayi shadeed hota hai. Aap Quetta mein ${dentist.name} se rabta karein. Kya thanda ya garam lagne par dard hota hai?`,
+        primaryTag: 'SPEAKING_REASSURING',
+        isUrgent: false
+      };
+    }
+
+    if (text.includes('skin') || text.includes('jild') || text.includes('khujli') || text.includes('rash') || text.includes('daane') || text.includes('جلد') || text.includes('خارش')) {
+      const dermDoc = this.findQuettaDoctor('dermatologist');
+      return {
+        rawText: `[NOD_EMPATHETIC] Main aapki jild aur khujli ki takleef samajh raha hoon.
+[SPEAKING_REASSURING] Jild par khujli ya daane kisi allergy, fungal infection ya mosami asraat ki wajah se ho saktay hain.
+- **Mahir Doctor:** Aap Quetta mein **${dermDoc.name}** (${dermDoc.primarySpecialty} - ${dermDoc.hospitalOrClinic}) se rabta karein (Phone: ${dermDoc.publicPhone || '081-2829915'}).
+
+Kya jild par surkh nishanat ya jalan bhi mehsoos ho rahi hai?`,
+        cleanSpeechText: `Main aapki jild ki takleef samajh raha hoon. Aap Quetta mein ${dermDoc.name} se rabta karein. Kya jild par daane ya jalan hai?`,
+        primaryTag: 'SPEAKING_REASSURING',
+        isUrgent: false
+      };
+    }
+
+    if (text.includes('kamar') || text.includes('back') || text.includes('ghutna') || text.includes('joint') || text.includes('joron') || text.includes('haddi') || text.includes('کمر') || text.includes('جوڑوں')) {
+      const rheumDoc = this.findQuettaDoctor('rheumatologist');
+      return {
+        rawText: `[NOD_EMPATHETIC] Joron aur kamar ka dard rozmarrah ke kaamo ko mutasir karta hai.
+[SPEAKING_REASSURING] Yeh takleef posture ki kharabi, khichaao ya androni joron ki sujan ki wajah se ho sakti hai. Bhari wazan uthane se parhez karein.
+- **Mahir Doctor:** Aap Quetta mein **${rheumDoc.name}** (${rheumDoc.primarySpecialty} - ${rheumDoc.hospitalOrClinic}) se rabta karein (Phone: ${rheumDoc.publicPhone || '081-2829915'}).
+
+Kya subah bistar se uthte waqt joron mein shadeed jakran mehsoos hoti hai?`,
+        cleanSpeechText: `Main joron ki takleef samajh sakta hoon. Aap Quetta mein ${rheumDoc.name} se rabta karein. Kya subah uthte waqt jakran hoti hai?`,
+        primaryTag: 'SPEAKING_REASSURING',
+        isUrgent: false
+      };
+    }
+
+    // 9. Dynamic Non-Repetitive Clarification Engine (Rotates responses so it NEVER loops)
     const followUp = this.formulateAdaptiveFollowUp(state);
-    return {
-      rawText: `[LISTENING_ATTENTIVE] Ji, main sun raha hoon. Baraye meharbani apni takleef ya alamaat (jaise bukhar, sar dard, pait ki kharabi, ya khansi) ke baray mein mazeed wazeh batayein taakay main sahi doctor aur ilaj ki taraf aapki rehnumayi kar sakun.\n\n${followUp.text}`,
-      cleanSpeechText: `Ji, main sun raha hoon. Baraye meharbani apni alamaat jaise bukhar, sar dard, ya pait ki takleef wazeh batayein.`,
-      primaryTag: 'LISTENING_ATTENTIVE',
-      isUrgent: false
-    };
+    const rotationIndex = this.conversationTurn % 3;
+
+    if (rotationIndex === 0) {
+      return {
+        rawText: `[LISTENING_ATTENTIVE] Main aapki baat ghaur se sun raha hoon. Apni takleef ke baray mein mazeed wazeh karein (jaise kis jagah dard hai aur kab se shuru hua) taakay behtar rahnumayi ki ja sakay.\n\n${followUp.text}`,
+        cleanSpeechText: `Ji, main sun raha hoon. Apni takleef ki jagah aur doraniya wazeh batayein.`,
+        primaryTag: 'LISTENING_ATTENTIVE',
+        isUrgent: false
+      };
+    } else if (rotationIndex === 1) {
+      return {
+        rawText: `[THINKING_ANALYZING] Main aapke bataye hue nikaat ka jaiza le raha hoon. Kya is takleef ke sath bukhar, kamzori ya kisi qisam ka naya masla bhi mehsoos ho raha hai?\n\n${followUp.text}`,
+        cleanSpeechText: `Main jaiza le raha hoon. Kya is takleef ke sath bukhar ya kamzori bhi mehsoos hui hai?`,
+        primaryTag: 'THINKING_ANALYZING',
+        isUrgent: false
+      };
+    } else {
+      return {
+        rawText: `[SPEAKING_REASSURING] Fikr na karein. Aap ba-asaani bol kar takleef batayein ya screen par diye gaye Verified Doctors ya Quick Actions button se bhi direct mashwara le saktay hain.\n\n${followUp.text}`,
+        cleanSpeechText: `Fikr na karein. Apni takleef ki tafseel batayein ya screen ke quick actions use karein.`,
+        primaryTag: 'SPEAKING_REASSURING',
+        isUrgent: false
+      };
+    }
   }
 }
 

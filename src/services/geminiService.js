@@ -64,42 +64,71 @@ Severe chest pain/pressure radiating to left arm/jaw, acute shortness of breath,
 
 export class GeminiService {
   constructor() {
-    this.groqApiKey = localStorage.getItem('digidoc_groq_api_key') || 
-                      import.meta.env.VITE_GROQ_API_KEY || 
-                      '';
-    this.geminiApiKey = localStorage.getItem('digidoc_gemini_api_key') || 
-                        import.meta.env.VITE_GEMINI_API_KEY || 
-                        '';
-    this.apiKey = this.groqApiKey || this.geminiApiKey;
     this.history = [];
     this.quettaDoctors = quettaDoctors || [];
     this.diseasesData = diseasesData || {};
     this.labRangesData = labRangesData || {};
+    this.failedKeys = new Set();
   }
 
-  setApiKey(key) {
-    const cleanKey = (key || '').trim();
-    if (cleanKey.startsWith('gsk_')) {
-      this.groqApiKey = cleanKey;
-      localStorage.setItem('digidoc_groq_api_key', cleanKey);
-    } else if (cleanKey) {
-      this.geminiApiKey = cleanKey;
-      localStorage.setItem('digidoc_gemini_api_key', cleanKey);
-    } else {
-      this.groqApiKey = '';
-      this.geminiApiKey = '';
+  getGroqKeyPool() {
+    const raw = [
+      localStorage.getItem('digidoc_groq_api_keys'),
+      localStorage.getItem('digidoc_groq_api_key'),
+      import.meta.env.VITE_GROQ_API_KEYS,
+      import.meta.env.VITE_GROQ_API_KEY
+    ].filter(Boolean).join(',');
+
+    const keys = raw.split(/[\s,;]+/).map(k => k.trim()).filter(k => k.startsWith('gsk_'));
+    return [...new Set(keys)];
+  }
+
+  getGeminiKeyPool() {
+    const raw = [
+      localStorage.getItem('digidoc_gemini_api_keys'),
+      localStorage.getItem('digidoc_gemini_api_key'),
+      import.meta.env.VITE_GEMINI_API_KEYS,
+      import.meta.env.VITE_GEMINI_API_KEY
+    ].filter(Boolean).join(',');
+
+    const keys = raw.split(/[\s,;]+/).map(k => k.trim()).filter(k => k.startsWith('AIzaSy'));
+    return [...new Set(keys)];
+  }
+
+  setApiKey(input) {
+    const raw = (input || '').trim();
+    this.failedKeys.clear();
+
+    const parts = raw.split(/[\s,;]+/).map(k => k.trim()).filter(Boolean);
+    const groqList = parts.filter(k => k.startsWith('gsk_'));
+    const geminiList = parts.filter(k => k.startsWith('AIzaSy') || !k.startsWith('gsk_'));
+
+    if (groqList.length > 0) {
+      localStorage.setItem('digidoc_groq_api_keys', groqList.join(','));
+      localStorage.setItem('digidoc_groq_api_key', groqList[0]);
+    }
+    if (geminiList.length > 0 && geminiList[0]) {
+      localStorage.setItem('digidoc_gemini_api_keys', geminiList.join(','));
+      localStorage.setItem('digidoc_gemini_api_key', geminiList[0]);
+    }
+    if (!raw) {
+      localStorage.removeItem('digidoc_groq_api_keys');
       localStorage.removeItem('digidoc_groq_api_key');
+      localStorage.removeItem('digidoc_gemini_api_keys');
       localStorage.removeItem('digidoc_gemini_api_key');
     }
-    this.apiKey = this.groqApiKey || this.geminiApiKey;
   }
 
   getApiKey() {
-    return this.groqApiKey || this.geminiApiKey || '';
+    const g = this.getGroqKeyPool();
+    if (g.length > 0) return g.join(', ');
+    const m = this.getGeminiKeyPool();
+    if (m.length > 0) return m.join(', ');
+    return '';
   }
 
   isGroqKey() {
-    return Boolean(this.groqApiKey && this.groqApiKey.startsWith('gsk_'));
+    return this.getGroqKeyPool().length > 0;
   }
 
   resetChat() {
@@ -107,38 +136,39 @@ export class GeminiService {
   }
 
   async sendMessage(userMessage) {
-    // 1. Try Groq Ultra-Fast API Integration if key available
-    if (this.groqApiKey) {
-      try {
-        const messages = [
-          {
-            role: 'system',
-            content: `${SYSTEM_PROMPT}\n\nRELEVANT CLINICAL DATA SUMMARY:\nTotal Quetta Doctors in Directory: ${this.quettaDoctors.length}\nTotal Standard Lab Tests Available: ${this.labRangesData.tests?.length || 424}`
-          },
-          ...this.history.map(item => ({
-            role: item.role === 'model' || item.role === 'assistant' ? 'assistant' : 'user',
-            content: item.parts?.[0]?.text || item.content || ''
-          })),
-          { role: 'user', content: userMessage }
-        ];
+    const messages = [
+      {
+        role: 'system',
+        content: `${SYSTEM_PROMPT}\n\nRELEVANT CLINICAL DATA SUMMARY:\nTotal Quetta Doctors in Directory: ${this.quettaDoctors.length}\nTotal Standard Lab Tests Available: ${this.labRangesData.tests?.length || 424}`
+      },
+      ...this.history.map(item => ({
+        role: item.role === 'model' || item.role === 'assistant' ? 'assistant' : 'user',
+        content: item.parts?.[0]?.text || item.content || ''
+      })),
+      { role: 'user', content: userMessage }
+    ];
 
-        const groqModels = [
-          'qwen/qwen3.8-27b',
-          'openai/gpt-oss-120b',
-          'openai/gpt-oss-20b',
-          'llama-3.3-70b-versatile',
-          'llama-3.1-8b-instant'
-        ];
+    // 1. Try Groq Multi-Key & Multi-Model Pool (Automatic failover between 5 backup models & keys)
+    const groqKeys = this.getGroqKeyPool().filter(k => !this.failedKeys.has(k));
+    const groqModels = [
+      'qwen/qwen3.8-27b',
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
+      'allam-2-7b',
+      'canopylabs/orpheus-v1-english'
+    ];
 
-        let reply = '';
-        let lastError = null;
-
+    if (groqKeys.length > 0) {
+      for (const key of groqKeys) {
         for (const model of groqModels) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1500);
+
           try {
             const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${this.groqApiKey}`,
+                'Authorization': `Bearer ${key}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
@@ -146,43 +176,49 @@ export class GeminiService {
                 messages,
                 temperature: 0.35,
                 max_tokens: 850
-              })
+              }),
+              signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
             if (!res.ok) {
               const errJson = await res.json().catch(() => ({}));
-              throw new Error(errJson.error?.message || `Groq API error ${res.status}`);
+              // If invalid key, quota, or rate-limited (401/403/429), mark key and switch to next key in pool!
+              if (res.status === 401 || res.status === 403 || res.status === 429 || errJson.error?.code === 'invalid_api_key') {
+                console.warn(`Groq Key error (${res.status}). Switching to backup key...`);
+                this.failedKeys.add(key);
+                break; // Break model loop to try next backup key
+              }
+              continue; // try next model
             }
 
             const data = await res.json();
-            reply = data.choices?.[0]?.message?.content || '';
-            if (reply) break;
+            const reply = data.choices?.[0]?.message?.content || '';
+            if (reply) {
+              this.history.push({ role: 'user', parts: [{ text: userMessage }] });
+              this.history.push({ role: 'model', parts: [{ text: reply }] });
+              return this.parseReactionTags(reply);
+            }
           } catch (err) {
-            lastError = err;
-            console.warn(`Groq model ${model} failed, trying fallback:`, err.message);
+            clearTimeout(timeoutId);
+            console.warn(`Groq model ${model} notice:`, err.message);
           }
         }
-
-        if (reply) {
-          this.history.push({ role: 'user', parts: [{ text: userMessage }] });
-          this.history.push({ role: 'model', parts: [{ text: reply }] });
-          return this.parseReactionTags(reply);
-        }
-      } catch (err) {
-        console.warn("Groq attempt failed, checking fallback:", err);
       }
     }
 
-    // 2. Try Google Gemini API Integration if key available
-    if (this.geminiApiKey) {
-      try {
-        const geminiModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
-        let reply = '';
+    // 2. Try Google Gemini API Multi-Key Pool if keys available
+    const geminiKeys = this.getGeminiKeyPool().filter(k => !this.failedKeys.has(k));
+    const geminiModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
+    if (geminiKeys.length > 0) {
+      for (const key of geminiKeys) {
         for (const model of geminiModels) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1500);
+
           try {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
-            
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
             const payload = {
               systemInstruction: {
                 parts: [{ 
@@ -203,30 +239,38 @@ export class GeminiService {
             const res = await fetch(endpoint, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
+              body: JSON.stringify(payload),
+              signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
-            if (res.ok) {
-              const data = await res.json();
-              reply = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              if (reply) break;
+            if (!res.ok) {
+              const errJson = await res.json().catch(() => ({}));
+              const errMsg = errJson.error?.message || `Gemini API error ${res.status}`;
+              if (res.status === 401 || res.status === 403 || res.status === 429 || errMsg.includes('leaked')) {
+                console.warn(`Gemini key error (${res.status}). Switching to backup key...`);
+                this.failedKeys.add(key);
+                break;
+              }
+              continue;
+            }
+
+            const data = await res.json();
+            const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (reply) {
+              this.history.push({ role: 'user', parts: [{ text: userMessage }] });
+              this.history.push({ role: 'model', parts: [{ text: reply }] });
+              return this.parseReactionTags(reply);
             }
           } catch (e) {
+            clearTimeout(timeoutId);
             console.warn(`Gemini model ${model} notice:`, e.message);
           }
         }
-
-        if (reply) {
-          this.history.push({ role: 'user', parts: [{ text: userMessage }] });
-          this.history.push({ role: 'model', parts: [{ text: reply }] });
-          return this.parseReactionTags(reply);
-        }
-      } catch (err) {
-        console.warn("Gemini API call failed:", err);
       }
     }
 
-    // 3. Fallback to offline local clinical engine
+    // 3. Instant Fallback to upgraded Pakistani clinical engine (0ms latency, zero lag, never repeats)
     return this.localClinicalEngine(userMessage);
   }
 
@@ -241,8 +285,14 @@ export class GeminiService {
     const primaryTag = tagsFound[0] || 'SPEAKING_REASSURING';
     const isUrgent = tagsFound.includes('ALERT_URGENT') || text.includes('1122') || text.includes('Emergency') || text.includes('ایمرجنسی');
     
-    // Clean text for speech synthesis
-    const cleanSpeechText = text.replace(/\[[A-Z_]+\]/g, '').replace(/\*+/g, '').replace(/###+/g, '').trim();
+    // Clean text for speech synthesis: remove tags, markdown headings, bold, bullet points
+    const cleanSpeechText = text
+      .replace(/\[[A-Z_]+\]/g, '')
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/[#*_~`]/g, '')
+      .replace(/^\s*[-•]\s*/gm, '')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     return {
       rawText: text,
@@ -253,7 +303,7 @@ export class GeminiService {
     };
   }
 
-  localClinicalEngine(userMessage, apiNotice) {
+  localClinicalEngine(userMessage) {
     return clinicalEngine.generateResponse(userMessage);
   }
 }
