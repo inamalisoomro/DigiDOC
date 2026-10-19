@@ -166,6 +166,15 @@ export class SpeechService {
           this.isListening = false;
           if (this.onListeningChange) this.onListeningChange(false);
         }
+        // Network error: Google STT servers unreachable — auto-retry after 2s
+        // isRestarting=true prevents onend from firing a duplicate restart
+        if (event.error === 'network') {
+          this.isListening = false;
+          if (this.onListeningChange) this.onListeningChange(false);
+          if (this.isContinuous && !this.isSpeaking && !this.isProcessing) {
+            this.restartRecognitionWithDelay(2000);
+          }
+        }
       };
 
       this.recognition.onend = () => {
