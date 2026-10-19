@@ -103,20 +103,15 @@ export class SpeechService {
       };
 
       this.recognition.onresult = (event) => {
-        // If AI is currently speaking, the user is interrupting — stop speech immediately!
+        // BARGE-IN: If AI is speaking and user starts talking, stop AI immediately
         if (this.isSpeaking) {
-          // Only cancel synthesis directly — do NOT call stopSpeaking() here because it
-          // resets isProcessing and triggers restartRecognitionWithDelay, which conflicts
-          // with commitTranscript() that runs right after this block.
-          if (this.synthesis) this.synthesis.cancel();
+          this.synthesis.cancel(); // stops speech; utterance.onerror fires but cleans state fine
           this.isSpeaking = false;
           if (this.onSpeakingChange) this.onSpeakingChange(false);
           if (this.onInterrupted) this.onInterrupted();
-          // Clear any pending restart that stopSpeaking normally schedules
-          this.isRestarting = false;
         }
 
-        // If still processing (but not speaking), discard — avoid double-submit
+        // If AI is processing (waiting for response), discard — avoid double-submit
         if (this.isProcessing) return;
 
         let interim = '';
@@ -368,8 +363,6 @@ export class SpeechService {
     };
 
     utterance.onend = () => {
-      // If isSpeaking was already cleared by a barge-in, skip — the new query handles restart
-      if (!this.isSpeaking) return;
       this.isSpeaking = false;
       this.isProcessing = false;
       if (this.onSpeakingChange) this.onSpeakingChange(false);
@@ -382,7 +375,8 @@ export class SpeechService {
     };
 
     utterance.onerror = (e) => {
-      // 'interrupted' means synthesis.cancel() was called intentionally (barge-in) — skip side effects
+      // 'interrupted' = synthesis.cancel() was called intentionally (barge-in)
+      // Skip — the new user query handles its own state from here
       if (e.error === 'interrupted') return;
       console.warn("Speech synthesis notice:", e);
       this.isSpeaking = false;
